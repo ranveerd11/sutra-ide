@@ -29,8 +29,10 @@ import { useMCPServiceState } from '../util/services.js';
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 import { SteeringFile } from '../../../../common/steeringDocsService.js';
+import { UnifiedMarketplaceStorefront } from './UnifiedMarketplaceStorefront.js';
 
 type Tab =
+	| 'marketplace'
 	| 'models'
 	| 'localProviders'
 	| 'providers'
@@ -1461,6 +1463,7 @@ export const Settings = () => {
 		useState<Tab>('models');
 
 	const navItems: { tab: Tab; label: string }[] = [
+		{ tab: 'marketplace', label: 'Marketplace' },
 		{ tab: 'models', label: 'Models' },
 		{ tab: 'localProviders', label: 'Local Providers' },
 		{ tab: 'providers', label: 'Main Providers' },
@@ -2051,6 +2054,13 @@ Use Model Context Protocol to provide Agent mode with more tools.
 									<ErrorBoundary>
 										<MCPConnectionLogPanel />
 									</ErrorBoundary>
+								</ErrorBoundary>
+							</div>
+
+							{/* Marketplace section */}
+							<div className={shouldShowTab('marketplace') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<UnifiedMarketplaceStorefront />
 								</ErrorBoundary>
 							</div>
 

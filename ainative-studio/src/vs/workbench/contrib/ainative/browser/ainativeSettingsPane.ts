@@ -196,6 +196,31 @@ registerAction2(class extends Action2 {
 	}
 })
 
+export const SUTRA_OPEN_MARKETPLACE_ACTION_ID = 'workbench.action.sutra.openMarketplace';
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: SUTRA_OPEN_MARKETPLACE_ACTION_ID,
+			title: nls.localize2('sutraMarketplaceAction', "Sutra Studio: Open Marketplace"),
+			f1: true,
+			icon: Codicon.extensions,
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const editorService = accessor.get(IEditorService);
+		const instantiationService = accessor.get(IInstantiationService);
+
+		const openEditors = editorService.findEditors(AINativeSettingsInput.RESOURCE);
+		if (openEditors.length > 0) {
+			await editorService.closeEditors(openEditors);
+		}
+
+		const input = instantiationService.createInstance(AINativeSettingsInput);
+		await editorService.openEditor(input);
+	}
+});
+
 
 
 

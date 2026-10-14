@@ -23,6 +23,7 @@ import { IRefreshModelService } from '../../../../../../../workbench/contrib/ain
 import { IAINativeSettingsService } from '../../../../../../../workbench/contrib/ainative/common/ainativeSettingsService.js';
 import { IExtensionTransferService } from '../../../../../../../workbench/contrib/ainative/browser/extensionTransferService.js'
 import { ISteeringDocsService } from '../../../../../../../workbench/contrib/ainative/common/steeringDocsService.js'
+import { IUnifiedCatalogService } from '../../../../common/marketplace/unifiedCatalogTypes.js'
 
 import { IInstantiationService } from '../../../../../../../platform/instantiation/common/instantiation.js'
 import { ICodeEditorService } from '../../../../../../../editor/browser/services/codeEditorService.js'
@@ -251,6 +252,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IUsageTrackingService: accessor.get(IUsageTrackingService),
 		IGitHubOAuthService: accessor.get(IGitHubOAuthService),
 		ISteeringDocsService: accessor.get(ISteeringDocsService),
+		IUnifiedCatalogService: accessor.get(IUnifiedCatalogService),
 
 	} as const
 	return reactAccessor
