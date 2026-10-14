@@ -123,7 +123,7 @@ suite('AgentMemoryService', () => {
 		originalFetch = global.fetch;
 		global.fetch = mockFetch.fetch.bind(mockFetch) as any;
 
-		service = disposables.add(new AgentMemoryService(mockAuthService));
+		service = disposables.add(new AgentMemoryService(mockAuthService).configure({ mode: 'cloud' }));
 	});
 
 	teardown(() => {
@@ -306,3 +306,125 @@ suite('AgentMemoryService', () => {
 		ok(true, 'Service disposed properly');
 	});
 });
+
+suite('AgentMemoryService (Local Sovereign Mode)', () => {
+	const disposables = new DisposableStore();
+	let localService: AgentMemoryService;
+
+	setup(() => {
+		const unauthenticatedAuth = new MockAuthService();
+		unauthenticatedAuth.setAccessToken(null);
+		unauthenticatedAuth.setAuthState(AuthState.Unauthenticated);
+
+		localService = disposables.add(new AgentMemoryService(unauthenticatedAuth).configure({ mode: 'local', dbPath: ':memory:' }));
+	});
+
+	teardown(() => {
+		disposables.clear();
+	});
+
+	ensureNoDisposablesAreLeakedInTestSuite();
+
+	test('should identify as local mode', () => {
+		strictEqual(localService.isLocalMode, true);
+	});
+
+	test('should store memory locally with zero authentication required', async () => {
+		const storedEvents: MemoryEntry[] = [];
+		disposables.add(localService.onDidStoreMemory(e => storedEvents.push(e)));
+
+		await localService.storeMemory('Local preference: use 4 spaces for indentation', 'user', {
+			sessionId: 'sess-001',
+			category: 'preferences'
+		});
+
+		strictEqual(storedEvents.length, 1);
+		strictEqual(storedEvents[0].content, 'Local preference: use 4 spaces for indentation');
+		strictEqual(storedEvents[0].role, 'user');
+		strictEqual(storedEvents[0].metadata?.['category'], 'preferences');
+		strictEqual(storedEvents[0].metadata?.['source'], 'sutra-ide');
+		ok(storedEvents[0].metadata?.['timestamp']);
+	});
+
+	test('should search memories semantically using local embeddings', async () => {
+		await localService.storeMemory(
+			'export async function calculateFibonacci(n: number): Promise<number> { return n <= 1 ? n : await calculateFibonacci(n-1) + await calculateFibonacci(n-2); }',
+			'assistant',
+			{ sessionId: 'sess-code', topic: 'math' }
+		);
+
+		await localService.storeMemory(
+			'CREATE TABLE users (id SERIAL PRIMARY KEY, username VARCHAR(50) NOT NULL, email VARCHAR(255) UNIQUE NOT NULL);',
+			'assistant',
+			{ sessionId: 'sess-db', topic: 'database' }
+		);
+
+		const fibResults = await localService.searchMemory('calculate Fibonacci number recursion', 5);
+		ok(fibResults.length > 0, 'Should find matching memory');
+		ok(fibResults[0].content.includes('calculateFibonacci'), 'Top result should be Fibonacci implementation');
+		ok(fibResults[0].similarity > 0.1, 'Similarity should be significant');
+
+		const dbResults = await localService.searchMemory('database table users SQL schema', 5);
+		ok(dbResults.length > 0, 'Should find matching database memory');
+		ok(dbResults[0].content.includes('CREATE TABLE users'), 'Top result should be SQL schema');
+	});
+
+	test('should retrieve and reconstruct session context within token limit', async () => {
+		const sessionId = 'session-turn-based';
+
+		await localService.storeMemory('Hello, please help me inspect the codebase.', 'user', { sessionId });
+		await localService.storeMemory('Certainly, I have loaded the AST index.', 'assistant', { sessionId });
+		await localService.storeMemory('Please add unit tests for the vector store.', 'user', { sessionId });
+
+		const fullContext = await localService.getContext(sessionId, 4000);
+		strictEqual(fullContext.sessionId, sessionId);
+		strictEqual(fullContext.messages.length, 3);
+		strictEqual(fullContext.messages[0].role, 'user');
+		strictEqual(fullContext.messages[0].content, 'Hello, please help me inspect the codebase.');
+		strictEqual(fullContext.messages[1].role, 'assistant');
+		strictEqual(fullContext.messages[2].role, 'user');
+		ok(fullContext.tokenCount > 0);
+
+		// Test token truncation
+		const tightContext = await localService.getContext(sessionId, 15);
+		ok(tightContext.messages.length < 3, 'Should truncate messages to fit within token limit');
+		ok(tightContext.tokenCount <= 15, 'Token count must not exceed limit');
+	});
+
+	test('should isolate memories across different sessions in getContext', async () => {
+		await localService.storeMemory('Message for Session A', 'user', { sessionId: 'session-A' });
+		await localService.storeMemory('Message for Session B', 'user', { sessionId: 'session-B' });
+
+		const contextA = await localService.getContext('session-A', 4000);
+		strictEqual(contextA.messages.length, 1);
+		strictEqual(contextA.messages[0].content, 'Message for Session A');
+
+		const contextB = await localService.getContext('session-B', 4000);
+		strictEqual(contextB.messages.length, 1);
+		strictEqual(contextB.messages[0].content, 'Message for Session B');
+	});
+
+	test('should switch modes via setMode', () => {
+		localService.setMode('cloud');
+		strictEqual(localService.isLocalMode, false);
+		localService.setMode('local');
+		strictEqual(localService.isLocalMode, true);
+	});
+
+	test('should operate with zero network requests in local mode', async () => {
+		let fetchCalled = false;
+		global.fetch = (() => {
+			fetchCalled = true;
+			throw new Error('fetch should not be called in local mode');
+		}) as any;
+
+		await localService.storeMemory('Offline note', 'user', { sessionId: 'offline-sess' });
+		const searchResults = await localService.searchMemory('Offline note');
+		const context = await localService.getContext('offline-sess');
+
+		strictEqual(fetchCalled, false, 'Network fetch must never be invoked');
+		ok(searchResults.length > 0);
+		strictEqual(context.messages.length, 1);
+	});
+});
+

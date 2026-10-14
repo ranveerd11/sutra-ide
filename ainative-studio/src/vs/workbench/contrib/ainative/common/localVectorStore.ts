@@ -357,7 +357,7 @@ export class LocalVectorStore {
 		const candidates: VectorSearchResultItem[] = [];
 
 		for (const chunk of this._chunks.values()) {
-			if (chunk.projectId !== projectId) {
+			if (projectId && chunk.projectId !== projectId) {
 				continue;
 			}
 
@@ -418,7 +418,7 @@ export class LocalVectorStore {
 		// Collect project chunks
 		const projectChunks: VectorChunkRecord[] = [];
 		for (const chunk of this._chunks.values()) {
-			if (chunk.projectId === projectId) {
+			if (!projectId || chunk.projectId === projectId) {
 				projectChunks.push(chunk);
 			}
 		}
@@ -536,6 +536,24 @@ export class LocalVectorStore {
 
 		results.sort((a, b) => b.score - a.score);
 		return results.slice(0, limit);
+	}
+
+	/**
+	 * Retrieve all chunks optionally filtered by project ID
+	 */
+	public async getAllChunks(projectId?: string): Promise<VectorChunkRecord[]> {
+		await this.init();
+		if (!projectId) {
+			return Array.from(this._chunks.values());
+		}
+
+		const filtered: VectorChunkRecord[] = [];
+		for (const chunk of this._chunks.values()) {
+			if (chunk.projectId === projectId) {
+				filtered.push(chunk);
+			}
+		}
+		return filtered;
 	}
 
 	/**

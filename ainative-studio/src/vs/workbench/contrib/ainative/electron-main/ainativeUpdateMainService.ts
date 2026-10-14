@@ -40,8 +40,6 @@ export class AINativeMainUpdateService extends Disposable implements IAINativeUp
 
 		this._updateService.checkForUpdates(false) // implicity check, then handle result ourselves
 
-		console.log('updateState', this._updateService.state)
-
 		if (this._updateService.state.type === StateType.Uninitialized) {
 			// The update service hasn't been initialized yet
 			return { message: explicit ? 'Checking for updates soon...' : null, action: explicit ? 'reinstall' : undefined } as const
@@ -79,7 +77,7 @@ export class AINativeMainUpdateService extends Disposable implements IAINativeUp
 
 		if (this._updateService.state.type === StateType.Ready) {
 			// Update is ready
-			return { message: 'Restart AINative Studio to update!', action: 'restart' } as const
+			return { message: 'Restart Sutra IDE to update!', action: 'restart' } as const
 		}
 
 		if (this._updateService.state.type === StateType.Disabled) {
@@ -95,7 +93,9 @@ export class AINativeMainUpdateService extends Disposable implements IAINativeUp
 
 	private async _manualCheckGHTagIfDisabled(explicit: boolean): Promise<AINativeCheckUpdateResponse> {
 		try {
-			const response = await fetch('https://api.github.com/repos/AINative-Studio/binaries/releases/latest');
+			const updateRepo = (typeof process !== 'undefined' && (process.env['SUTRA_UPDATE_REPO'] || process.env['NOVA_UPDATE_REPO'])) || 'ranveerd11/sutra-ide';
+			const updateUrl = (typeof process !== 'undefined' && (process.env['SUTRA_UPDATE_URL'] || process.env['NOVA_UPDATE_URL'])) || `https://api.github.com/repos/${updateRepo}/releases/latest`;
+			const response = await fetch(updateUrl);
 
 			const data = await response.json();
 			const version = data.tag_name;
@@ -112,11 +112,11 @@ export class AINativeMainUpdateService extends Disposable implements IAINativeUp
 			if (explicit) {
 				if (response.ok) {
 					if (!isUpToDate) {
-						message = 'A new version of AINative Studio is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
+						message = 'A new version of Sutra IDE is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
 						action = 'reinstall'
 					}
 					else {
-						message = 'AINative Studio is up-to-date!'
+						message = 'Sutra IDE is up-to-date!'
 					}
 				}
 				else {
@@ -127,7 +127,7 @@ export class AINativeMainUpdateService extends Disposable implements IAINativeUp
 			// not explicit
 			else {
 				if (response.ok && !isUpToDate) {
-					message = 'A new version of AINative Studio is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
+					message = 'A new version of Sutra IDE is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
 					action = 'reinstall'
 				}
 				else {
