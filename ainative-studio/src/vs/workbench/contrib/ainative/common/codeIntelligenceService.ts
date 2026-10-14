@@ -6,7 +6,7 @@
 /**
  * Code Intelligence Service
  * Provides high-level in-process code analysis operations using Tree-Sitter WASM AST parsing.
- * Supports Python, JavaScript, TypeScript, Go, Rust, Java, C++, C#, and Ruby with local execution.
+ * Supports Python, JavaScript, TypeScript, Go, Rust, Java, C++, C#, Ruby, Kotlin, Swift, PHP, C, and SQL with local execution.
  */
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -92,7 +92,12 @@ export class CodeIntelligenceService extends Disposable implements ICodeIntellig
 		'java',
 		'cpp',
 		'csharp',
-		'ruby'
+		'ruby',
+		'kotlin',
+		'swift',
+		'php',
+		'c',
+		'sql'
 	]);
 
 	constructor(
@@ -179,7 +184,7 @@ export class CodeIntelligenceService extends Disposable implements ICodeIntellig
 	getToolSchema(): ToolDefinition {
 		return {
 			name: 'code_intelligence',
-			description: 'Analyze code with AST parsing, symbol finding, complexity metrics, and reference tracking. Supports Python, JavaScript, TypeScript, Go, Rust, Java, C++, C#, Ruby.',
+			description: 'Analyze code with AST parsing, symbol finding, complexity metrics, and reference tracking. Supports Python, JavaScript, TypeScript, Go, Rust, Java, C++, C#, Ruby, Kotlin, Swift, PHP, C, SQL.',
 			input_schema: {
 				type: 'object',
 				properties: {
@@ -194,7 +199,22 @@ export class CodeIntelligenceService extends Disposable implements ICodeIntellig
 					},
 					language: {
 						type: 'string',
-						enum: ['python', 'javascript', 'typescript', 'go', 'rust', 'java', 'cpp', 'csharp', 'ruby'],
+						enum: [
+							'python',
+							'javascript',
+							'typescript',
+							'go',
+							'rust',
+							'java',
+							'cpp',
+							'csharp',
+							'ruby',
+							'kotlin',
+							'swift',
+							'php',
+							'c',
+							'sql'
+						],
 						description: 'Programming language'
 					},
 					symbol_name: {

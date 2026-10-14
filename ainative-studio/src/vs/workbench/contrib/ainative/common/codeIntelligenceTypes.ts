@@ -21,7 +21,12 @@ export type CodeLanguage =
 	| 'java'
 	| 'cpp'
 	| 'csharp'
-	| 'ruby';
+	| 'ruby'
+	| 'kotlin'
+	| 'swift'
+	| 'php'
+	| 'c'
+	| 'sql';
 
 /**
  * Code intelligence operations

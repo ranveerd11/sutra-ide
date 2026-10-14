@@ -57,7 +57,12 @@ const WASM_FILE_MAP: Record<CodeLanguage, string> = {
 	java: 'tree-sitter-java.wasm',
 	cpp: 'tree-sitter-cpp.wasm',
 	csharp: 'tree-sitter-c-sharp.wasm',
-	ruby: 'tree-sitter-ruby.wasm'
+	ruby: 'tree-sitter-ruby.wasm',
+	kotlin: 'tree-sitter-kotlin.wasm',
+	swift: 'tree-sitter-swift.wasm',
+	php: 'tree-sitter-php.wasm',
+	c: 'tree-sitter-c.wasm',
+	sql: 'tree-sitter-sql.wasm'
 };
 
 export function normalizeLanguage(lang: string): CodeLanguage | undefined {
@@ -87,12 +92,13 @@ export function normalizeLanguage(lang: string): CodeLanguage | undefined {
 			return 'java';
 		case 'cpp':
 		case 'c++':
-		case 'c':
 		case 'cc':
 		case 'cxx':
-		case 'h':
 		case 'hpp':
 			return 'cpp';
+		case 'c':
+		case 'h':
+			return 'c';
 		case 'csharp':
 		case 'c#':
 		case 'cs':
@@ -100,6 +106,24 @@ export function normalizeLanguage(lang: string): CodeLanguage | undefined {
 		case 'ruby':
 		case 'rb':
 			return 'ruby';
+		case 'kotlin':
+		case 'kt':
+		case 'kts':
+			return 'kotlin';
+		case 'swift':
+			return 'swift';
+		case 'php':
+		case 'phtml':
+		case 'php4':
+		case 'php5':
+		case 'php7':
+		case 'phps':
+			return 'php';
+		case 'sql':
+		case 'pgsql':
+		case 'mysql':
+		case 'sqlite':
+			return 'sql';
 		default:
 			return undefined;
 	}
@@ -115,6 +139,10 @@ export function getComplexityRank(score: number): ComplexityRank {
 	if (score <= 30) return 'D';
 	if (score <= 40) return 'E';
 	return 'F';
+}
+
+function escapeRegex(str: string): string {
+	return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export class TreeSitterAnalyzer {
@@ -223,8 +251,19 @@ export class TreeSitterAnalyzer {
 			const wasmFileName = WASM_FILE_MAP[lang];
 			if (!wasmFileName) return null;
 
-			const wasmPath = pathMod.join(this._wasmDir, wasmFileName);
-			if (!fsMod.existsSync(wasmPath)) return null;
+			let wasmPath = pathMod.join(this._wasmDir, wasmFileName);
+			if (!fsMod.existsSync(wasmPath)) {
+				if (lang === 'c') {
+					const fallbackCpp = pathMod.join(this._wasmDir, 'tree-sitter-cpp.wasm');
+					if (fsMod.existsSync(fallbackCpp)) {
+						wasmPath = fallbackCpp;
+					} else {
+						return null;
+					}
+				} else {
+					return null;
+				}
+			}
 
 			const wasmBuffer = fsMod.readFileSync(wasmPath);
 			const language = await this._treeSitterModule.Language.load(wasmBuffer);
@@ -439,13 +478,26 @@ export class TreeSitterAnalyzer {
 		return null;
 	}
 
+	private static _findParamList(node: TreeSitterNode): TreeSitterNode | null {
+		if (
+			node.type === 'parameters' ||
+			node.type === 'formal_parameters' ||
+			node.type === 'parameter_list'
+		) {
+			return node;
+		}
+		if (node.children) {
+			for (const child of node.children) {
+				const found = this._findParamList(child);
+				if (found) return found;
+			}
+		}
+		return null;
+	}
+
 	private static _extractParameters(funcNode: TreeSitterNode, language: CodeLanguage): FunctionParameter[] {
 		const params: FunctionParameter[] = [];
-		const paramList = funcNode.children?.find(c =>
-			c.type === 'parameters' ||
-			c.type === 'formal_parameters' ||
-			c.type === 'parameter_list'
-		);
+		const paramList = this._findParamList(funcNode);
 
 		if (!paramList || !paramList.children) {
 			// Fast parameter string fallback
@@ -458,7 +510,15 @@ export class TreeSitterAnalyzer {
 					if (colonIdx !== -1) {
 						params.push({ name: p.substring(0, colonIdx).trim(), type: p.substring(colonIdx + 1).trim() });
 					} else {
-						params.push({ name: p });
+						const words = p.split(/\s+/);
+						if (words.length > 1) {
+							params.push({
+								name: words[words.length - 1].replace(/^[*&]+/, '').replace(/^\$/, ''),
+								type: words.slice(0, -1).join(' ')
+							});
+						} else {
+							params.push({ name: p.replace(/^\$/, '') });
+						}
 					}
 				}
 			}
@@ -468,11 +528,23 @@ export class TreeSitterAnalyzer {
 		for (const child of paramList.children) {
 			if (child.type === 'identifier') {
 				params.push({ name: child.text });
-			} else if (child.type === 'typed_parameter' || child.type === 'required_parameter' || child.type === 'parameter') {
-				const idNode = child.childForFieldName('name') || child.children?.find(c => c.type === 'identifier');
-				const typeNode = child.childForFieldName('type') || child.children?.find(c => c.type.includes('type'));
+			} else if (
+				child.type === 'typed_parameter' ||
+				child.type === 'required_parameter' ||
+				child.type === 'parameter' ||
+				child.type === 'parameter_declaration' ||
+				child.type === 'simple_parameter'
+			) {
+				const idNode =
+					child.childForFieldName('declarator') ||
+					child.childForFieldName('name') ||
+					child.children?.find(c => c.type === 'identifier' || c.type === 'type_identifier');
+				const typeNode =
+					child.childForFieldName('type') ||
+					child.children?.find(c => c.type.includes('type'));
+				const rawName = idNode ? this._extractNodeName(idNode) || idNode.text : child.text.split(':')[0].trim();
 				params.push({
-					name: idNode?.text || child.text.split(':')[0].trim(),
+					name: rawName.replace(/^[*&]+/, '').trim(),
 					type: typeNode?.text || undefined
 				});
 			}
@@ -558,7 +630,7 @@ export class TreeSitterAnalyzer {
 				const text = node.text.replace(/^using\s+/, '').replace(/;$/, '').trim();
 				out.push(text);
 			}
-		} else if (language === 'cpp') {
+		} else if (language === 'cpp' || language === 'c') {
 			if (type === 'preproc_include') {
 				const text = node.text.replace(/^#include\s+/, '').trim();
 				out.push(text);
@@ -567,6 +639,27 @@ export class TreeSitterAnalyzer {
 			if (type === 'import_declaration') {
 				const text = node.text.replace(/^import\s+/, '').replace(/;$/, '').trim();
 				out.push(text);
+			}
+		} else if (language === 'kotlin') {
+			if (type === 'import_header') {
+				const text = node.text.replace(/^import\s+/, '').trim();
+				if (text) {
+					out.push(text);
+				}
+			}
+		} else if (language === 'swift') {
+			if (type === 'import_declaration') {
+				const text = node.text.replace(/^import\s+/, '').trim();
+				if (text) {
+					out.push(text);
+				}
+			}
+		} else if (language === 'php') {
+			if (type === 'namespace_use_declaration' || type === 'use_declaration') {
+				const text = node.text.replace(/^use\s+/, '').replace(/;$/, '').trim();
+				if (text) {
+					out.push(text);
+				}
 			}
 		} else if (language === 'ruby') {
 			if (type === 'call' && (node.text.startsWith('require') || node.text.startsWith('load'))) {
@@ -658,15 +751,21 @@ export class TreeSitterAnalyzer {
 			type === 'if_statement' ||
 			type === 'if_expression' ||
 			type === 'elif_clause' ||
+			type === 'elseif_clause' ||
 			type === 'for_statement' ||
 			type === 'for_expression' ||
 			type === 'for_in_statement' ||
 			type === 'while_statement' ||
 			type === 'while_expression' ||
+			type === 'repeat_while_statement' ||
+			type === 'guard_statement' ||
+			type === 'when_expression' ||
+			type === 'when_entry' ||
 			type === 'switch_case' ||
 			type === 'case_clause' ||
 			type === 'case_statement' ||
 			type === 'match_arm' ||
+			type === 'match_expression' ||
 			type === 'catch_clause' ||
 			type === 'except_clause' ||
 			type === 'ternary_expression' ||
@@ -699,6 +798,8 @@ export class TreeSitterAnalyzer {
 			type === 'for_statement' ||
 			type === 'for_in_statement' ||
 			type === 'while_statement' ||
+			type === 'guard_statement' ||
+			type === 'when_expression' ||
 			type === 'catch_clause' ||
 			type === 'except_clause' ||
 			type === 'switch_case';
@@ -728,7 +829,11 @@ export class TreeSitterAnalyzer {
 			type === 'function_item' ||
 			type === 'arrow_function' ||
 			type === 'method' ||
-			type === 'singleton_method'
+			type === 'singleton_method' ||
+			type === 'anonymous_function' ||
+			type === 'create_function_statement' ||
+			type === 'create_procedure_statement' ||
+			type === 'procedure_definition'
 		);
 	}
 
@@ -742,7 +847,15 @@ export class TreeSitterAnalyzer {
 			type === 'class_specifier' ||
 			type === 'struct_specifier' ||
 			type === 'class' ||
-			type === 'module'
+			type === 'module' ||
+			type === 'object_declaration' ||
+			type === 'protocol_declaration' ||
+			type === 'struct_declaration' ||
+			type === 'interface_declaration' ||
+			type === 'trait_declaration' ||
+			type === 'create_table_statement' ||
+			type === 'create_view_statement' ||
+			type === 'create_schema_statement'
 		);
 	}
 
@@ -751,7 +864,11 @@ export class TreeSitterAnalyzer {
 			type === 'variable_declarator' ||
 			type === 'let_declaration' ||
 			type === 'var_declaration' ||
-			type === 'field_declaration'
+			type === 'field_declaration' ||
+			type === 'property_declaration' ||
+			type === 'pattern_binding' ||
+			type === 'column_definition' ||
+			type === 'declaration'
 		);
 	}
 
@@ -760,8 +877,10 @@ export class TreeSitterAnalyzer {
 			type === 'import_statement' ||
 			type === 'import_from_statement' ||
 			type === 'import_declaration' ||
+			type === 'import_header' ||
 			type === 'use_declaration' ||
 			type === 'using_directive' ||
+			type === 'namespace_use_declaration' ||
 			type === 'preproc_include'
 		);
 	}
@@ -779,7 +898,7 @@ export class TreeSitterAnalyzer {
 		}
 
 		for (const child of node.children || []) {
-			if (child.type === 'identifier' || child.type === 'type_identifier' || child.type === 'field_identifier') {
+			if (child.type === 'identifier' || child.type === 'type_identifier' || child.type === 'field_identifier' || child.type === 'simple_identifier' || child.type === 'table_name') {
 				return child.text;
 			}
 			if (child.type === 'function_declarator' || child.type === 'declarator') {
@@ -800,8 +919,33 @@ export class TreeSitterAnalyzer {
 			const line = lines[i];
 			const trimmed = line.trim();
 
+			// SQL Functions / Procedures / Tables
+			if (language === 'sql') {
+				const sqlFnMatch = trimmed.match(/^(?:CREATE\s+(?:OR\s+REPLACE\s+)?)?(?:FUNCTION|PROCEDURE)\s+([a-zA-Z0-9_]+)/i);
+				if (sqlFnMatch) {
+					symbols.push({
+						name: sqlFnMatch[1],
+						type: 'function',
+						location: { line: i + 1, column: line.indexOf(sqlFnMatch[1]) },
+						signature: trimmed
+					});
+					continue;
+				}
+
+				const sqlTableMatch = trimmed.match(/^CREATE\s+(?:TABLE|VIEW|SCHEMA)\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_]+)/i);
+				if (sqlTableMatch) {
+					symbols.push({
+						name: sqlTableMatch[1],
+						type: 'class',
+						location: { line: i + 1, column: line.indexOf(sqlTableMatch[1]) },
+						signature: trimmed
+					});
+					continue;
+				}
+			}
+
 			// Functions
-			const fnMatch = trimmed.match(/^(?:export\s+)?(?:async\s+)?(?:def|function|fn|func)\s+([a-zA-Z0-9_]+)/);
+			const fnMatch = trimmed.match(/^(?:(?:public|protected|private|static|async|export|default|override|suspend|inline|open|final)\s+)*(?:def|function|fn|func|fun)\s+([a-zA-Z0-9_]+)/);
 			if (fnMatch) {
 				symbols.push({
 					name: fnMatch[1],
@@ -812,8 +956,22 @@ export class TreeSitterAnalyzer {
 				continue;
 			}
 
-			// Classes / Structs
-			const classMatch = trimmed.match(/^(?:export\s+)?(?:class|struct|interface|type)\s+([a-zA-Z0-9_]+)/);
+			// C / C++ functions
+			if (language === 'c' || language === 'cpp') {
+				const cFnMatch = trimmed.match(/^(?:(?:static|inline|const|extern|virtual)\s+)*(?:void|int|char|short|long|float|double|bool|size_t|ssize_t|uint\d+_t|int\d+_t|[a-zA-Z0-9_]+_t|[A-Z][a-zA-Z0-9_]*)\s*\*?\s*([a-zA-Z0-9_]+)\s*\([^)]*\)\s*\{?/);
+				if (cFnMatch && cFnMatch[1] !== 'if' && cFnMatch[1] !== 'while' && cFnMatch[1] !== 'for' && cFnMatch[1] !== 'switch') {
+					symbols.push({
+						name: cFnMatch[1],
+						type: 'function',
+						location: { line: i + 1, column: line.indexOf(cFnMatch[1]) },
+						signature: trimmed
+					});
+					continue;
+				}
+			}
+
+			// Classes / Structs / Interfaces / Protocols / Enums
+			const classMatch = trimmed.match(/^(?:(?:public|protected|private|static|abstract|sealed|data|open|final|export|default)\s+)*(?:class|struct|interface|type|protocol|object|trait|enum)\s+([a-zA-Z0-9_]+)/);
 			if (classMatch) {
 				symbols.push({
 					name: classMatch[1],
@@ -825,7 +983,17 @@ export class TreeSitterAnalyzer {
 			}
 
 			// Imports
-			if (trimmed.startsWith('import ') || trimmed.startsWith('from ') || trimmed.startsWith('using ') || trimmed.startsWith('use ')) {
+			if (
+				trimmed.startsWith('import ') ||
+				trimmed.startsWith('from ') ||
+				trimmed.startsWith('using ') ||
+				trimmed.startsWith('use ') ||
+				trimmed.startsWith('#include ') ||
+				trimmed.startsWith('require ') ||
+				trimmed.startsWith('require_once ') ||
+				trimmed.startsWith('include ') ||
+				trimmed.startsWith('include_once ')
+			) {
 				symbols.push({
 					name: trimmed,
 					type: 'import',
@@ -843,13 +1011,21 @@ export class TreeSitterAnalyzer {
 
 	private static _heuristicFindSymbol(code: string, language: CodeLanguage, symbolName: string): SymbolResult {
 		const lines = code.split('\n');
+		const escaped = escapeRegex(symbolName);
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
 			if (line.includes(symbolName)) {
 				let type: SymbolType = 'variable';
-				if (line.match(new RegExp(`(?:def|function|fn|func)\\s+${symbolName}`))) {
+				if (
+					line.match(new RegExp(`(?:def|function|fn|func|fun)\\s+${escaped}\\b`)) ||
+					line.match(new RegExp(`(?:create\\s+(?:or\\s+replace\\s+)?(?:function|procedure))\\s+${escaped}\\b`, 'i')) ||
+					line.match(new RegExp(`(?:void|int|char|short|long|float|double|bool|size_t|[a-zA-Z0-9_]+_t)\\s+\\*?\\s*${escaped}\\s*\\(`))
+				) {
 					type = 'function';
-				} else if (line.match(new RegExp(`(?:class|struct|interface)\\s+${symbolName}`))) {
+				} else if (
+					line.match(new RegExp(`(?:class|struct|interface|type|protocol|object|trait|enum)\\s+${escaped}\\b`)) ||
+					line.match(new RegExp(`(?:create\\s+(?:table|view|schema)(?:\\s+if\\s+not\\s+exists)?)\\s+${escaped}\\b`, 'i'))
+				) {
 					type = 'class';
 				}
 
@@ -893,15 +1069,37 @@ export class TreeSitterAnalyzer {
 
 	private static _heuristicGetFunctionSignature(code: string, language: CodeLanguage, functionName: string): SignatureResult {
 		const lines = code.split('\n');
+		const escaped = escapeRegex(functionName);
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i].trim();
-			if (line.match(new RegExp(`(?:def|function|fn|func)\\s+${functionName}\\b`))) {
+			const matches =
+				line.match(new RegExp(`(?:def|function|fn|func|fun)\\s+${escaped}\\b`)) ||
+				line.match(new RegExp(`(?:CREATE\\s+(?:OR\\s+REPLACE\\s+)?)?(?:FUNCTION|PROCEDURE)\\s+${escaped}\\b`, 'i')) ||
+				line.match(new RegExp(`(?:void|int|char|short|long|float|double|bool|size_t|[a-zA-Z0-9_]+_t)\\s+\\*?\\s*${escaped}\\s*\\(`));
+
+			if (matches) {
 				const paramMatch = line.match(/\(([^)]*)\)/);
 				const parameters: FunctionParameter[] = [];
 				if (paramMatch && paramMatch[1]) {
 					const parts = paramMatch[1].split(',').map(p => p.trim()).filter(Boolean);
 					for (const p of parts) {
-						parameters.push({ name: p.split(':')[0].trim() });
+						const colonIdx = p.indexOf(':');
+						if (colonIdx !== -1) {
+							parameters.push({
+								name: p.substring(0, colonIdx).trim(),
+								type: p.substring(colonIdx + 1).trim()
+							});
+						} else {
+							const words = p.split(/\s+/);
+							if (words.length > 1) {
+								parameters.push({
+									name: words[words.length - 1].replace(/^\$/, ''),
+									type: words.slice(0, -1).join(' ')
+								});
+							} else {
+								parameters.push({ name: p.replace(/^\$/, '') });
+							}
+						}
 					}
 				}
 
@@ -923,7 +1121,7 @@ export class TreeSitterAnalyzer {
 		for (const line of lines) {
 			const trimmed = line.trim();
 			// Python
-			const pyMatch = trimmed.match(/^import\s+([a-zA-Z0-9_]+)/) || trimmed.match(/^from\s+([a-zA-Z0-9_]+)\s+import/);
+			const pyMatch = trimmed.match(/^import\s+([a-zA-Z0-9_.]+)/) || trimmed.match(/^from\s+([a-zA-Z0-9_.]+)\s+import/);
 			if (pyMatch) {
 				imports.push(pyMatch[1]);
 				continue;
@@ -934,8 +1132,25 @@ export class TreeSitterAnalyzer {
 				imports.push(jsMatch[1] || jsMatch[2]);
 				continue;
 			}
-			// Go / Rust / C# / Java
-			const otherMatch = trimmed.match(/^(?:import|using|use)\s+['"]?([a-zA-Z0-9_./]+)['"]?/);
+			// C / C++ #include
+			const cMatch = trimmed.match(/^#include\s+([<"][^>"]+[>"])/);
+			if (cMatch) {
+				imports.push(cMatch[1]);
+				continue;
+			}
+			// PHP: use Foo\Bar\Baz; require '...';
+			const phpUseMatch = trimmed.match(/^use\s+([a-zA-Z0-9_\\]+);?/);
+			if (phpUseMatch) {
+				imports.push(phpUseMatch[1]);
+				continue;
+			}
+			const phpReqMatch = trimmed.match(/^(?:require|require_once|include|include_once)\s+['"]([^'"]+)['"]/);
+			if (phpReqMatch) {
+				imports.push(phpReqMatch[1]);
+				continue;
+			}
+			// Go / Rust / C# / Java / Kotlin / Swift
+			const otherMatch = trimmed.match(/^(?:import|using|use)\s+['"]?([a-zA-Z0-9_./\\]+)['"]?;?/);
 			if (otherMatch) {
 				imports.push(otherMatch[1]);
 			}
@@ -953,38 +1168,61 @@ export class TreeSitterAnalyzer {
 		const lines = code.split('\n');
 		const functions: FunctionComplexity[] = [];
 
+		let fileDecisions = 0;
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (
+				/\b(if|else if|elif|elseif|while|for|foreach|switch|case|when|guard|catch|except)\b/.test(trimmed) ||
+				/&&|\|\||\band\b|\bor\b/.test(trimmed)
+			) {
+				fileDecisions += 1;
+			}
+		}
+
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i].trim();
-			const fnMatch = line.match(/^(?:export\s+)?(?:async\s+)?(?:def|function|fn|func)\s+([a-zA-Z0-9_]+)/);
+			const fnMatch =
+				line.match(/^(?:(?:public|protected|private|static|async|export|default|override|suspend)\s+)*(?:def|function|fn|func|fun)\s+([a-zA-Z0-9_]+)/) ||
+				line.match(/^(?:CREATE\s+(?:OR\s+REPLACE\s+)?)?(?:FUNCTION|PROCEDURE)\s+([a-zA-Z0-9_]+)/i) ||
+				line.match(/^(?:(?:static|inline)\s+)*(?:void|int|char|short|long|float|double|bool|size_t)\s+\*?\s*([a-zA-Z0-9_]+)\s*\(/);
+
 			if (fnMatch) {
-				functions.push({
-					name: fnMatch[1],
-					cyclomaticComplexity: 1,
-					cognitiveComplexity: 0,
-					line: i + 1,
-					column: 0,
-					complexityRank: 'A'
-				});
+				const fnName = fnMatch[1];
+				if (fnName !== 'if' && fnName !== 'while' && fnName !== 'for' && fnName !== 'switch') {
+					functions.push({
+						name: fnName,
+						cyclomaticComplexity: 1 + fileDecisions,
+						cognitiveComplexity: fileDecisions,
+						line: i + 1,
+						column: 0,
+						complexityRank: getComplexityRank(1 + fileDecisions)
+					});
+				}
 			}
 		}
 
 		if (functions.length === 0) {
 			functions.push({
 				name: '<file>',
-				cyclomaticComplexity: 1,
-				cognitiveComplexity: 0,
+				cyclomaticComplexity: 1 + fileDecisions,
+				cognitiveComplexity: fileDecisions,
 				line: 1,
 				column: 0,
-				complexityRank: 'A'
+				complexityRank: getComplexityRank(1 + fileDecisions)
 			});
 		}
+
+		const totalFunctions = functions.length;
+		const totalComplexity = functions.reduce((acc, f) => acc + f.cyclomaticComplexity, 0);
+		const maxComplexity = Math.max(...functions.map(f => f.cyclomaticComplexity), 0);
+		const averageComplexity = totalFunctions > 0 ? Number((totalComplexity / totalFunctions).toFixed(2)) : 0;
 
 		return {
 			language,
 			functions,
-			averageComplexity: 1,
-			maxComplexity: 1,
-			totalFunctions: functions.length
+			averageComplexity,
+			maxComplexity,
+			totalFunctions
 		};
 	}
 }

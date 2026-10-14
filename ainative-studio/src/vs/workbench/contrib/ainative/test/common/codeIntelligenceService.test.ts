@@ -24,7 +24,7 @@ suite('CodeIntelligenceService - In-Process Tree-Sitter AST Engine', () => {
 	});
 
 	suite('Language Support & Normalization', () => {
-		test('should support all 9 target languages', async () => {
+		test('should support all 14 target languages', async () => {
 			const languages: CodeLanguage[] = [
 				'python',
 				'javascript',
@@ -34,7 +34,12 @@ suite('CodeIntelligenceService - In-Process Tree-Sitter AST Engine', () => {
 				'java',
 				'cpp',
 				'csharp',
-				'ruby'
+				'ruby',
+				'kotlin',
+				'swift',
+				'php',
+				'c',
+				'sql'
 			];
 
 			for (const lang of languages) {
@@ -52,7 +57,15 @@ suite('CodeIntelligenceService - In-Process Tree-Sitter AST Engine', () => {
 				['rs', 'rust'],
 				['c++', 'cpp'],
 				['c#', 'csharp'],
-				['rb', 'ruby']
+				['rb', 'ruby'],
+				['kt', 'kotlin'],
+				['kts', 'kotlin'],
+				['swift', 'swift'],
+				['php', 'php'],
+				['c', 'c'],
+				['h', 'c'],
+				['sql', 'sql'],
+				['pgsql', 'sql']
 			];
 
 			for (const [alias, expected] of aliasCases) {
@@ -214,6 +227,118 @@ end
 			const names = result.symbols.map(s => s.name);
 			assert.ok(names.includes('calculate_vat'), 'calculate_vat should be extracted');
 		});
+
+		test('should extract Kotlin functions and classes', async () => {
+			const kotlinCode = `
+package com.sutra.demo
+
+import java.util.UUID
+
+fun processOrder(orderId: String): Boolean {
+    return true
+}
+
+class PaymentManager {
+    fun charge(amount: Double): Boolean {
+        return true
+    }
+}
+`;
+			const result = await service.parseAST(kotlinCode, 'kotlin');
+
+			assert.strictEqual(result.language, 'kotlin');
+			const names = result.symbols.map(s => s.name);
+			assert.ok(names.includes('processOrder'), 'processOrder should be extracted');
+			assert.ok(names.includes('PaymentManager'), 'PaymentManager should be extracted');
+		});
+
+		test('should extract Swift functions and classes', async () => {
+			const swiftCode = `
+import Foundation
+
+func processTransaction(id: String) -> Bool {
+    return true
+}
+
+class TransactionManager {
+    func refund(amount: Double) -> Bool {
+        return true
+    }
+}
+`;
+			const result = await service.parseAST(swiftCode, 'swift');
+
+			assert.strictEqual(result.language, 'swift');
+			const names = result.symbols.map(s => s.name);
+			assert.ok(names.includes('processTransaction'), 'processTransaction should be extracted');
+			assert.ok(names.includes('TransactionManager'), 'TransactionManager should be extracted');
+		});
+
+		test('should extract PHP functions and classes', async () => {
+			const phpCode = `
+<?php
+namespace App\\Services;
+
+use App\\Models\\User;
+
+function sanitizeInput(string $data): string {
+    return trim($data);
+}
+
+class UserService {
+    public function findUser(int $id): User {
+        return new User();
+    }
+}
+`;
+			const result = await service.parseAST(phpCode, 'php');
+
+			assert.strictEqual(result.language, 'php');
+			const names = result.symbols.map(s => s.name);
+			assert.ok(names.includes('sanitizeInput'), 'sanitizeInput should be extracted');
+			assert.ok(names.includes('UserService'), 'UserService should be extracted');
+		});
+
+		test('should extract C functions and structs', async () => {
+			const cCode = `
+#include <stdio.h>
+
+struct Buffer {
+    int capacity;
+};
+
+int process_data(int count) {
+    return count * 2;
+}
+`;
+			const result = await service.parseAST(cCode, 'c');
+
+			assert.strictEqual(result.language, 'c');
+			const names = result.symbols.map(s => s.name);
+			assert.ok(names.includes('process_data'), 'process_data should be extracted');
+			assert.ok(names.includes('Buffer'), 'Buffer struct should be extracted');
+		});
+
+		test('should extract SQL tables and functions', async () => {
+			const sqlCode = `
+CREATE TABLE users (
+    id INT PRIMARY KEY,
+    email VARCHAR(255)
+);
+
+CREATE FUNCTION get_user_count() RETURNS INT AS $$
+BEGIN
+    RETURN 42;
+END;
+$$;
+`;
+			const result = await service.parseAST(sqlCode, 'sql');
+
+			assert.strictEqual(result.language, 'sql');
+			const names = result.symbols.map(s => s.name);
+			assert.ok(names.includes('users'), 'users table should be extracted');
+			assert.ok(names.includes('get_user_count'), 'get_user_count function should be extracted');
+		});
 	});
 
 	suite('findSymbol', () => {
@@ -312,6 +437,28 @@ def calculate_interest(principal: float, rate: float = 0.05) -> float:
 			}
 		});
 
+		test('should extract Kotlin function signature and parameters', async () => {
+			const code = `fun processPayment(amount: Double, currency: String): Boolean { return true }`;
+			const result = await service.getFunctionSignature(code, 'kotlin', 'processPayment');
+
+			assert.strictEqual(result.found, true);
+			assert.strictEqual(result.name, 'processPayment');
+			assert.ok(result.signature?.includes('processPayment'));
+			const paramNames = result.parameters?.map(p => p.name);
+			assert.ok(paramNames?.includes('amount'));
+		});
+
+		test('should extract C function signature and parameters', async () => {
+			const code = `int calculate_sum(int a, int b) { return a + b; }`;
+			const result = await service.getFunctionSignature(code, 'c', 'calculate_sum');
+
+			assert.strictEqual(result.found, true);
+			assert.strictEqual(result.name, 'calculate_sum');
+			assert.ok(result.signature?.includes('calculate_sum'));
+			const paramNames = result.parameters?.map(p => p.name);
+			assert.ok(paramNames?.includes('b'));
+		});
+
 		test('should return found=false for missing function', async () => {
 			const code = `def foo(): pass`;
 			const result = await service.getFunctionSignature(code, 'python', 'missing_function');
@@ -369,6 +516,42 @@ use std::sync::Arc;
 			assert.ok(result.imports.some(imp => imp.includes('std::collections::HashMap')));
 		});
 
+		test('should extract Kotlin and Swift imports', async () => {
+			const ktCode = `
+import com.example.service.OrderService
+import kotlinx.coroutines.flow.Flow
+`;
+			const ktResult = await service.analyzeImports(ktCode, 'kotlin');
+			assert.strictEqual(ktResult.language, 'kotlin');
+			assert.ok(ktResult.imports.includes('com.example.service.OrderService'));
+
+			const swiftCode = `
+import SwiftUI
+import Combine
+`;
+			const swiftResult = await service.analyzeImports(swiftCode, 'swift');
+			assert.strictEqual(swiftResult.language, 'swift');
+			assert.ok(swiftResult.imports.includes('SwiftUI'));
+		});
+
+		test('should extract PHP and C imports', async () => {
+			const phpCode = `
+use App\\Services\\AuthService;
+use App\\Models\\User;
+`;
+			const phpResult = await service.analyzeImports(phpCode, 'php');
+			assert.strictEqual(phpResult.language, 'php');
+			assert.ok(phpResult.imports.includes('App\\Services\\AuthService'));
+
+			const cCode = `
+#include <stdio.h>
+#include "my_header.h"
+`;
+			const cResult = await service.analyzeImports(cCode, 'c');
+			assert.strictEqual(cResult.language, 'c');
+			assert.ok(cResult.imports.includes('<stdio.h>'));
+		});
+
 		test('should return empty list when no imports present', async () => {
 			const code = `const x = 10;`;
 			const result = await service.analyzeImports(code, 'javascript');
@@ -402,6 +585,20 @@ def complex_decision(a, b, c):
 			assert.ok(func?.cyclomaticComplexity! >= 4);
 			assert.ok(func?.cognitiveComplexity! >= 3);
 			assert.strictEqual(func?.complexityRank, 'A');
+		});
+
+		test('should calculate complexity for Kotlin control flow', async () => {
+			const ktCode = `
+fun evaluateStatus(status: Int): String {
+    if (status == 1) return "Active"
+    if (status == 2) return "Pending"
+    return "Unknown"
+}
+`;
+			const ktResult = await service.analyzeComplexity(ktCode, 'kotlin');
+			assert.strictEqual(ktResult.language, 'kotlin');
+			assert.ok(ktResult.totalFunctions >= 1);
+			assert.ok(ktResult.maxComplexity >= 3);
 		});
 
 		test('should assign correct complexity ranks', async () => {
@@ -445,7 +642,12 @@ def complex_decision(a, b, c):
 			assert.ok(languages.includes('cpp'));
 			assert.ok(languages.includes('csharp'));
 			assert.ok(languages.includes('ruby'));
-			assert.strictEqual(languages.length, 9);
+			assert.ok(languages.includes('kotlin'));
+			assert.ok(languages.includes('swift'));
+			assert.ok(languages.includes('php'));
+			assert.ok(languages.includes('c'));
+			assert.ok(languages.includes('sql'));
+			assert.strictEqual(languages.length, 14);
 		});
 	});
 });
