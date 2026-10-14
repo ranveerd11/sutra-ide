@@ -51,4 +51,11 @@ export const VOID_REJECT_ALL_DIFFS_ACTION_ID = AINATIVE_REJECT_ALL_DIFFS_ACTION_
 
 // Vibe Coder Mode (redesign phase 9) - toggles the simplified, chat-first layout.
 // See vibeCoderModeActions.ts.
-export const AINATIVE_TOGGLE_VIBE_CODER_MODE_ACTION_ID = 'ainative.toggleVibeCoderMode'
+export const AINATIVE_TOGGLE_VIBE_CODER_MODE_ACTION_ID = 'ainative.toggleVibeCoderMode';
+
+// Sutra Vibe Ambient Actions & Marketplace Launchers
+export const SUTRA_VIBE_SWITCH_PERSONA_ACTION_ID = 'workbench.action.sutra.vibeSwitchPersona';
+export const SUTRA_VIBE_TOGGLE_SKILLS_ACTION_ID = 'workbench.action.sutra.vibeToggleSkills';
+export const SUTRA_VIBE_SANDBOX_STATUS_ACTION_ID = 'workbench.action.sutra.vibeSandboxStatus';
+export const SUTRA_OPEN_MARKETPLACE_ACTION_ID = 'workbench.action.sutra.openMarketplace';
+

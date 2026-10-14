@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+import { Event } from '../../../../../base/common/event.js';
 
 export const IUnifiedCatalogService = createDecorator<IUnifiedCatalogService>('unifiedCatalogService');
 
@@ -74,6 +75,11 @@ export interface CatalogCategoryInfo {
 
 export interface IUnifiedCatalogService {
 	readonly _serviceBrand: undefined;
+
+	/**
+	 * Event fired when an item is installed, uninstalled, or toggled
+	 */
+	readonly onDidCatalogChange: Event<void>;
 
 	/**
 	 * Search and filter across the unified catalog

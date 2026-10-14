@@ -8,6 +8,7 @@ import * as os from 'os';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../../base/common/buffer.js';
+import { Emitter, Event } from '../../../../../base/common/event.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
 import { ICommunityMarketplace } from './communityMarketplaceTypes.js';
@@ -50,6 +51,9 @@ export class UnifiedCatalogService extends Disposable implements IUnifiedCatalog
 	private readonly cacheDir: string;
 	private installedHookIds: Set<string> = new Set(['hook:pre-agent-verify', 'hook:post-agent-test']);
 	private activeVibePersonaId: string = 'vibe:architect';
+
+	private readonly _onDidCatalogChange = this._register(new Emitter<void>());
+	readonly onDidCatalogChange: Event<void> = this._onDidCatalogChange.event;
 
 	private static readonly BUNDLED_EXTENSIONS: UnifiedCatalogItem[] = [
 		{
@@ -414,6 +418,7 @@ export class UnifiedCatalogService extends Disposable implements IUnifiedCatalog
 		if (id.startsWith('skill:')) {
 			const skillName = id.replace('skill:', '');
 			await this._communityMarketplace.install(skillName);
+			this._onDidCatalogChange.fire();
 			return;
 		}
 
@@ -423,39 +428,46 @@ export class UnifiedCatalogService extends Disposable implements IUnifiedCatalog
 			if (entry) {
 				await this._mcpService.installFromRegistry(entry);
 			}
+			this._onDidCatalogChange.fire();
 			return;
 		}
 
 		if (id.startsWith('hook:')) {
 			this.installedHookIds.add(id);
 			await this._saveState();
+			this._onDidCatalogChange.fire();
 			return;
 		}
 
 		if (id.startsWith('vibe:')) {
 			this.activeVibePersonaId = id;
 			await this._saveState();
+			this._onDidCatalogChange.fire();
 			return;
 		}
 
 		// For extension category, record as installed
 		await this._saveState();
+		this._onDidCatalogChange.fire();
 	}
 
 	async uninstallItem(id: string): Promise<void> {
 		if (id.startsWith('hook:')) {
 			this.installedHookIds.delete(id);
 			await this._saveState();
+			this._onDidCatalogChange.fire();
 			return;
 		}
 
 		if (id.startsWith('mcp:')) {
 			const mcpId = id.replace('mcp:', '');
 			await this._mcpService.toggleServerIsOn(mcpId, false);
+			this._onDidCatalogChange.fire();
 			return;
 		}
 
 		await this._saveState();
+		this._onDidCatalogChange.fire();
 	}
 
 	async toggleItem(id: string, enabled: boolean): Promise<void> {
@@ -466,12 +478,14 @@ export class UnifiedCatalogService extends Disposable implements IUnifiedCatalog
 				this.installedHookIds.delete(id);
 			}
 			await this._saveState();
+			this._onDidCatalogChange.fire();
 			return;
 		}
 
 		if (id.startsWith('mcp:')) {
 			const mcpId = id.replace('mcp:', '');
 			await this._mcpService.toggleServerIsOn(mcpId, enabled);
+			this._onDidCatalogChange.fire();
 			return;
 		}
 
@@ -480,6 +494,7 @@ export class UnifiedCatalogService extends Disposable implements IUnifiedCatalog
 				this.activeVibePersonaId = id;
 			}
 			await this._saveState();
+			this._onDidCatalogChange.fire();
 			return;
 		}
 	}
