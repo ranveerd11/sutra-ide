@@ -83,6 +83,9 @@ export interface ICodeContextEngineService {
 	/** Semantic search within a project's embedded chunks. */
 	search(projectId: string, query: string, options?: SemanticSearchOptions): Promise<SemanticSearchResult>;
 
+	/** Hybrid BM25 lexical + dense vector search fused via Reciprocal Rank Fusion. */
+	hybridSearch(projectId: string, query: string, options?: SemanticSearchOptions): Promise<SemanticSearchResult>;
+
 	/** Delete one vector by id (e.g. to invalidate a chunk whose source file changed). */
 	deleteVector(projectId: string, vectorId: string, namespace?: string): Promise<void>;
 }
@@ -224,21 +227,37 @@ export class CodeContextEngineService extends Disposable implements ICodeContext
 	}
 
 	async search(projectId: string, query: string, options?: SemanticSearchOptions): Promise<SemanticSearchResult> {
+		return this.hybridSearch(projectId, query, options);
+	}
+
+	async hybridSearch(projectId: string, query: string, options?: SemanticSearchOptions): Promise<SemanticSearchResult> {
 		const store = this._getVectorStore();
 		const queryEmbedding = LocalEmbeddingEngine.embed(query);
 
 		const start = Date.now();
 		const limit = options?.limit ?? 10;
-		const threshold = options?.threshold ?? 0.1;
+		const threshold = options?.threshold ?? 0.05;
 
-		const results = await store.search(projectId, queryEmbedding, limit, threshold);
+		const hybridResults = await store.hybridSearch(projectId, query, queryEmbedding, limit, threshold);
 		const processingTimeMs = Date.now() - start;
+
+		const results = hybridResults.map(item => ({
+			id: item.id,
+			document: item.document,
+			similarity: item.similarity,
+			metadata: {
+				...item.metadata,
+				score: item.score,
+				bm25Rank: item.bm25Rank,
+				denseRank: item.denseRank
+			}
+		}));
 
 		return {
 			results,
 			query,
 			totalResults: results.length,
-			model: 'local-dense-256',
+			model: 'sutra-hybrid-rrf-256',
 			projectId,
 			processingTimeMs
 		};

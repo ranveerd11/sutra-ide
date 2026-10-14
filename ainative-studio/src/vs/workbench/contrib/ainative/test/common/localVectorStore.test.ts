@@ -128,4 +128,76 @@ suite('LocalVectorStore', () => {
 		assert.ok(results.length > 0);
 		assert.ok(duration < 50, `Search took ${duration.toFixed(2)}ms, expected < 50ms`);
 	});
+
+	test('should perform hybrid BM25 + dense search and rank exact identifier match top-1', async () => {
+		const proj = await store.ensureProject('hybrid_repo_1', 'hybrid-test');
+
+		const c1 = 'function handleUserSessionTimeout(session) { return session.invalidate(); }';
+		const c2 = 'const API_RATE_LIMIT_EXCEEDED = "Rate limit reached, please retry later";';
+		const c3 = 'function calculateTaxForIndianStates(amount, state) { return amount * 0.18; }';
+
+		await store.upsertChunk(
+			proj.id,
+			{ chunkId: 'c1.ts#L1-5', filePath: 'session.ts', startLine: 1, endLine: 5, text: c1 },
+			LocalEmbeddingEngine.embed(c1)
+		);
+		await store.upsertChunk(
+			proj.id,
+			{ chunkId: 'c2.ts#L1-5', filePath: 'constants.ts', startLine: 1, endLine: 5, text: c2 },
+			LocalEmbeddingEngine.embed(c2)
+		);
+		await store.upsertChunk(
+			proj.id,
+			{ chunkId: 'c3.ts#L1-5', filePath: 'tax.ts', startLine: 1, endLine: 5, text: c3 },
+			LocalEmbeddingEngine.embed(c3)
+		);
+
+		// Query for exact identifier
+		const results = await store.hybridSearch(proj.id, 'API_RATE_LIMIT_EXCEEDED', undefined, 5, 0.01);
+		assert.ok(results.length >= 1);
+		assert.strictEqual(results[0].id, 'c2.ts#L1-5');
+		assert.strictEqual(results[0].bm25Rank, 1);
+		assert.ok(results[0].score > 0);
+	});
+
+	test('should retrieve semantically relevant code when conceptual query is provided', async () => {
+		const proj = await store.ensureProject('hybrid_repo_2', 'semantic-test');
+
+		const c1 = 'function authenticateUserCredentials(username, password) { return verifyHash(password); }';
+		const c2 = 'function renderSvgCanvasElement(node, context) { return context.draw(node); }';
+
+		await store.upsertChunk(
+			proj.id,
+			{ chunkId: 'auth.ts#L1-5', filePath: 'auth.ts', startLine: 1, endLine: 5, text: c1 },
+			LocalEmbeddingEngine.embed(c1)
+		);
+		await store.upsertChunk(
+			proj.id,
+			{ chunkId: 'render.ts#L1-5', filePath: 'render.ts', startLine: 1, endLine: 5, text: c2 },
+			LocalEmbeddingEngine.embed(c2)
+		);
+
+		// Semantic query without exact word match
+		const results = await store.hybridSearch(proj.id, 'user login verification security check', undefined, 5, 0.01);
+		assert.ok(results.length >= 1);
+		assert.strictEqual(results[0].id, 'auth.ts#L1-5');
+		assert.ok(results[0].similarity > 0.1);
+	});
+
+	test('should handle empty or punctuation-only query gracefully', async () => {
+		const proj = await store.ensureProject('hybrid_repo_3', 'empty-query-test');
+
+		const code = 'function testEmpty() { return true; }';
+		await store.upsertChunk(
+			proj.id,
+			{ chunkId: 'empty.ts#L1-5', filePath: 'empty.ts', startLine: 1, endLine: 5, text: code },
+			LocalEmbeddingEngine.embed(code)
+		);
+
+		const resultsEmpty = await store.hybridSearch(proj.id, '   ', undefined, 5, 0.0);
+		assert.ok(Array.isArray(resultsEmpty));
+
+		const resultsPunct = await store.hybridSearch(proj.id, '!@#$%', undefined, 5, 0.0);
+		assert.ok(Array.isArray(resultsPunct));
+	});
 });
