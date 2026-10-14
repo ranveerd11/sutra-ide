@@ -3,8 +3,7 @@
  *  Licensed under the MIT License.
  *--------------------------------------------------------------------------------------------*/
 
-import * as path from 'path';
-import * as os from 'os';
+import * as path from '../../../../../base/common/path.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../../base/common/buffer.js';
@@ -290,15 +289,83 @@ export class UnifiedCatalogService extends Disposable implements IUnifiedCatalog
 		}
 	];
 
+	private static readonly BUILTIN_SKILLS: UnifiedCatalogItem[] = [
+		{
+			id: 'skill:frontend-ui-builder',
+			name: 'frontend-ui-builder',
+			displayName: 'Frontend UI Builder',
+			description: 'Transforms wireframes, Figma specs, and UX requirements into production-ready React and Tailwind components',
+			category: 'skill',
+			version: '1.2.0',
+			publisher: 'sutra-community',
+			rating: 4.9,
+			downloads: 12400,
+			tags: ['frontend', 'react', 'tailwind', 'ui'],
+			installed: false,
+			enabled: true,
+			repository: 'https://github.com/sutra-community/skill-frontend-ui-builder'
+		},
+		{
+			id: 'skill:system-architect',
+			name: 'system-architect',
+			displayName: 'System Architecture Advisor',
+			description: 'Evaluates architectural tradeoffs, module boundaries, database schemas, and microservice topologies',
+			category: 'skill',
+			version: '2.0.1',
+			publisher: 'sutra-community',
+			rating: 4.8,
+			downloads: 9800,
+			tags: ['architecture', 'design', 'microservices', 'database'],
+			installed: false,
+			enabled: true,
+			repository: 'https://github.com/sutra-community/skill-system-architect'
+		},
+		{
+			id: 'skill:security-hardening',
+			name: 'security-hardening',
+			displayName: 'Security Hardening & OWASP Guard',
+			description: 'Automated vulnerability scanning, sanitized queries, authorization matrix auditing, and secret prevention',
+			category: 'skill',
+			version: '1.1.0',
+			publisher: 'sutra-security',
+			rating: 5.0,
+			downloads: 8700,
+			tags: ['security', 'owasp', 'audit', 'hardening'],
+			installed: false,
+			enabled: true,
+			repository: 'https://github.com/sutra-security/skill-hardening'
+		},
+		{
+			id: 'skill:playwright-test-suite',
+			name: 'playwright-test-suite',
+			displayName: 'Playwright E2E Generator',
+			description: 'Synthesizes resilient End-to-End Playwright test flows with automatic wait conditions and accessible locators',
+			category: 'skill',
+			version: '1.0.4',
+			publisher: 'sutra-qa',
+			rating: 4.7,
+			downloads: 6500,
+			tags: ['testing', 'playwright', 'e2e', 'automation'],
+			installed: false,
+			enabled: true,
+			repository: 'https://github.com/sutra-qa/skill-playwright'
+		}
+	];
+
+	private _communityMarketplace?: ICommunityMarketplace;
+
 	constructor(
-		@ICommunityMarketplace private readonly _communityMarketplace: ICommunityMarketplace,
 		@IMCPService private readonly _mcpService: IMCPService,
 		@IFileService private readonly _fileService: IFileService,
 	) {
 		super();
-		const homeDir = os.homedir();
+		const homeDir = (typeof process !== 'undefined' && (process.env?.['HOME'] || process.env?.['USERPROFILE'])) || '/tmp';
 		const sutraHome = (typeof process !== 'undefined' && process.env?.['SUTRA_HOME']) || path.join(homeDir, '.sutra');
 		this.cacheDir = path.join(sutraHome, 'cache', 'marketplace');
+	}
+
+	setCommunityMarketplace(marketplace: ICommunityMarketplace): void {
+		this._communityMarketplace = marketplace;
 	}
 
 	getCategories(): CatalogCategoryInfo[] {
@@ -417,7 +484,9 @@ export class UnifiedCatalogService extends Disposable implements IUnifiedCatalog
 	async installItem(id: string): Promise<void> {
 		if (id.startsWith('skill:')) {
 			const skillName = id.replace('skill:', '');
-			await this._communityMarketplace.install(skillName);
+			if (this._communityMarketplace) {
+				await this._communityMarketplace.install(skillName);
+			}
 			this._onDidCatalogChange.fire();
 			return;
 		}
@@ -537,28 +606,34 @@ export class UnifiedCatalogService extends Disposable implements IUnifiedCatalog
 	}
 
 	private async _fetchSkills(): Promise<UnifiedCatalogItem[]> {
-		try {
-			const marketplaceSkills = await this._communityMarketplace.fetchSkills();
-			return marketplaceSkills.map(skill => ({
-				id: `skill:${skill.name}`,
-				name: skill.name,
-				displayName: skill.name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-				description: skill.description,
-				category: 'skill' as const,
-				version: skill.version,
-				publisher: skill.author,
-				rating: skill.rating ?? 4.5,
-				downloads: skill.downloads ?? 0,
-				tags: skill.keywords,
-				installed: false,
-				enabled: true,
-				repository: skill.repository,
-				homepage: skill.homepage,
-				metadata: { installCommand: skill.installCommand }
-			}));
-		} catch {
-			return [];
+		if (this._communityMarketplace) {
+			try {
+				const marketplaceSkills = await this._communityMarketplace.fetchSkills();
+				if (marketplaceSkills && marketplaceSkills.length > 0) {
+					return marketplaceSkills.map(skill => ({
+						id: `skill:${skill.name}`,
+						name: skill.name,
+						displayName: skill.name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+						description: skill.description,
+						category: 'skill' as const,
+						version: skill.version,
+						publisher: skill.author,
+						rating: skill.rating ?? 4.5,
+						downloads: skill.downloads ?? 0,
+						tags: skill.keywords,
+						installed: false,
+						enabled: true,
+						repository: skill.repository,
+						homepage: skill.homepage,
+						metadata: { installCommand: skill.installCommand }
+					}));
+				}
+			} catch {
+				// Fall through to built-in skills
+			}
 		}
+
+		return UnifiedCatalogService.BUILTIN_SKILLS;
 	}
 
 	private async _fetchMCPItems(): Promise<UnifiedCatalogItem[]> {

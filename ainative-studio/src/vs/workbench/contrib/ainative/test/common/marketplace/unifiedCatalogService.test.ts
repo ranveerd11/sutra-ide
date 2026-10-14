@@ -79,12 +79,17 @@ suite('UnifiedCatalogService', () => {
 		toggledMcpServers = {};
 	});
 
-	test('should return all 5 supported marketplace categories', () => {
+	function createService(): UnifiedCatalogService {
 		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
 			mockMcpService as IMCPService,
 			mockFileService as IFileService
 		);
+		service.setCommunityMarketplace(mockCommunityMarketplace as ICommunityMarketplace);
+		return service;
+	}
+
+	test('should return all 5 supported marketplace categories', () => {
+		const service = createService();
 
 		const categories = service.getCategories();
 		assert.strictEqual(categories.length, 5);
@@ -98,11 +103,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should aggregate items across all categories in default query', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		const result = await service.queryCatalog();
 		assert.strictEqual(result.items.length > 0, true);
@@ -115,11 +116,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should filter by specific category', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		const skillResults = await service.queryCatalog({ category: 'skill' });
 		assert.strictEqual(skillResults.items.every(i => i.category === 'skill'), true);
@@ -136,11 +133,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should perform multi-attribute search across title, description, and tags', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		const searchGit = await service.queryCatalog({ query: 'git' });
 		assert.strictEqual(searchGit.items.length > 0, true);
@@ -156,11 +149,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should sort catalog items by downloads and rating', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		const sortedByDownloads = await service.queryCatalog({ sortBy: 'downloads' });
 		for (let i = 0; i < sortedByDownloads.items.length - 1; i++) {
@@ -181,11 +170,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should delegate skill installation to CommunityMarketplace', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		await service.installItem('skill:git-workflows');
 		assert.strictEqual(installedSkills.includes('git-workflows'), true);
@@ -193,11 +178,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should delegate MCP installation to MCPService', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		await service.installItem('mcp:github');
 		assert.strictEqual(installedMcpServers.includes('github'), true);
@@ -205,11 +186,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should manage hook installation and toggle state', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		await service.installItem('hook:secret-scan-guard');
 		const itemAfterInstall = await service.getItem('hook:secret-scan-guard');
@@ -227,11 +204,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should switch active vibe persona', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		await service.installItem('vibe:prototyper');
 		const prototyper = await service.getItem('vibe:prototyper');
@@ -243,11 +216,7 @@ suite('UnifiedCatalogService', () => {
 	});
 
 	test('should retrieve single item by namespaced ID', async () => {
-		const service = new UnifiedCatalogService(
-			mockCommunityMarketplace as ICommunityMarketplace,
-			mockMcpService as IMCPService,
-			mockFileService as IFileService
-		);
+		const service = createService();
 
 		const item = await service.getItem('ext:ms-python.python');
 		assert.strictEqual(item !== null, true);

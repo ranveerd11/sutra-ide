@@ -132,3 +132,12 @@ import '../common/ainativeAuthService.js'
 
 // AINative Cloud Auth UI and commands
 import './ainativeAuthActions.js'
+
+// Sutra Unified Marketplace service
+import '../common/marketplace/unifiedCatalogService.js'
+
+// Sutra Open Agentic Bridge service
+import '../common/bridge/sutraAgenticBridgeService.js'
+
+// Sutra Vibe Coder Mode ambient status bar HUD
+import './vibeCoderModeStatusBar.js'
