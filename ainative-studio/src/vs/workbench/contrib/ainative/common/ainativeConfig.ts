@@ -86,7 +86,7 @@ const DEFAULT_CONFIG: AINativeConfig = {
 	enableMarketplace: false,
 	byokMode: true,
 	environment: 'production',
-	encryptionKeyId: 'nova-auth-tokens',
+	encryptionKeyId: 'sutra-auth-tokens',
 	tokenStorageProvider: 'electron-safe-storage',
 	sessionTimeout: 1800000, // 30 minutes
 	sessionCheckInterval: 60000, // 1 minute
@@ -145,14 +145,14 @@ export function getAINativeConfig(): AINativeConfig {
 	const environment = nodeEnv === 'development' ? 'development' :
 		nodeEnv === 'test' ? 'test' : 'production';
 
-	const configuredUrl = process.env['NOVA_API_BASE_URL'] || process.env['AINATIVE_API_BASE_URL'];
-	const byokMode = parseBool(process.env['NOVA_BYOK'], !configuredUrl);
+	const configuredUrl = process.env['SUTRA_API_BASE_URL'] || process.env['NOVA_API_BASE_URL'] || process.env['AINATIVE_API_BASE_URL'];
+	const byokMode = parseBool(process.env['SUTRA_BYOK'] || process.env['NOVA_BYOK'], !configuredUrl);
 	const apiBaseUrl = configuredUrl || (environment === 'test' ? 'https://api.ainative.studio' : (byokMode ? '' : 'https://api.ainative.studio'));
 
 	return {
 		apiBaseUrl,
-		apiTimeout: parseInt(process.env['NOVA_API_TIMEOUT'] || process.env['AINATIVE_API_TIMEOUT'], DEFAULT_CONFIG.apiTimeout),
-		enableAuth: parseBool(process.env['ENABLE_NOVA_AUTH'] || process.env['ENABLE_AINATIVE_AUTH'], DEFAULT_CONFIG.enableAuth),
+		apiTimeout: parseInt(process.env['SUTRA_API_TIMEOUT'] || process.env['NOVA_API_TIMEOUT'] || process.env['AINATIVE_API_TIMEOUT'], DEFAULT_CONFIG.apiTimeout),
+		enableAuth: parseBool(process.env['ENABLE_SUTRA_AUTH'] || process.env['ENABLE_NOVA_AUTH'] || process.env['ENABLE_AINATIVE_AUTH'], DEFAULT_CONFIG.enableAuth),
 		enableAIModels: parseBool(process.env['ENABLE_AI_MODELS'], DEFAULT_CONFIG.enableAIModels),
 		enableMarketplace: parseBool(process.env['ENABLE_MARKETPLACE'], DEFAULT_CONFIG.enableMarketplace),
 		byokMode,

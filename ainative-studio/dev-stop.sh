@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Nova IDE Development Stop Script
+# Sutra IDE Development Stop Script
 
-echo "🛑 Stopping Nova IDE Development Environment..."
+echo "🛑 Stopping Sutra IDE Development Environment..."
 
 # Kill watch processes
 echo "   Stopping watch processes..."

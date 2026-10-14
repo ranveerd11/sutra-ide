@@ -5,7 +5,7 @@
 
 /**
  * Local Vector Store
- * High-performance embedded vector storage engine backed by SQLite (.nova/index.db)
+ * High-performance embedded vector storage engine backed by SQLite (.sutra/index.db)
  * with an in-memory contiguous index for sub-5ms cosine similarity semantic search.
  */
 

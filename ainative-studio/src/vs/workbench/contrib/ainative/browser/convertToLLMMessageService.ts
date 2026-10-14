@@ -275,7 +275,7 @@ const prepareOpenAIOrAnthropicMessages = ({
 	// A COMPLETE HACK: last message is system message for context purposes
 
 	const sysMsgParts: string[] = []
-	if (aiInstructions) sysMsgParts.push(`GLOBAL RULES (from the user's .ainativerules file):\n${aiInstructions}`)
+	if (aiInstructions) sysMsgParts.push(`GLOBAL RULES:\n${aiInstructions}`)
 	if (systemMessage) sysMsgParts.push(systemMessage)
 	const combinedSystemMessage = sysMsgParts.join('\n\n')
 
@@ -552,16 +552,24 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		super()
 	}
 
-	// Read .ainativerules files from workspace folders
+	// Read rules files (.sutrarules, .novarules, .ainativerules) from workspace folders
 	private _getGlobalRulesFileContents(): string {
 		try {
 			const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 			let globalRules = '';
+			const ruleCandidates = ['.sutrarules', '.novarules', '.ainativerules'];
 			for (const folder of workspaceFolders) {
-				const uri = URI.joinPath(folder.uri, '.ainativerules')
-				const { model } = this.ainativeModelService.getModel(uri)
-				if (!model) continue
-				globalRules += model.getValue(EndOfLinePreference.LF) + '\n\n';
+				for (const ruleFileName of ruleCandidates) {
+					const uri = URI.joinPath(folder.uri, ruleFileName);
+					const { model } = this.ainativeModelService.getModel(uri);
+					if (model) {
+						const val = model.getValue(EndOfLinePreference.LF);
+						if (val.trim()) {
+							globalRules += val + '\n\n';
+							break;
+						}
+					}
+				}
 			}
 			return globalRules.trim();
 		}

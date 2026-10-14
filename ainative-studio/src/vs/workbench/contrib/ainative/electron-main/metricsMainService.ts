@@ -118,8 +118,8 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		@IApplicationStorageMainService private readonly _appStorage: IApplicationStorageMainService,
 	) {
 		super()
-		const posthogKey = (typeof process !== 'undefined' && (process.env['NOVA_POSTHOG_KEY'] || process.env['POSTHOG_KEY'])) || '';
-		const posthogHost = (typeof process !== 'undefined' && (process.env['NOVA_POSTHOG_HOST'] || process.env['POSTHOG_HOST'])) || 'https://us.i.posthog.com';
+		const posthogKey = (typeof process !== 'undefined' && (process.env['SUTRA_POSTHOG_KEY'] || process.env['NOVA_POSTHOG_KEY'] || process.env['POSTHOG_KEY'])) || '';
+		const posthogHost = (typeof process !== 'undefined' && (process.env['SUTRA_POSTHOG_HOST'] || process.env['NOVA_POSTHOG_HOST'] || process.env['POSTHOG_HOST'])) || 'https://us.i.posthog.com';
 
 		if (posthogKey) {
 			this.client = new PostHog(posthogKey, { host: posthogHost });
@@ -184,7 +184,8 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		}
 
 		// Strict opt-in: telemetry is disabled unless explicitly opted in
-		const didOptIn = this._appStorage.getBoolean('nova.telemetry.optIn', StorageScope.APPLICATION, false);
+		const didOptIn = this._appStorage.getBoolean('sutra.telemetry.optIn', StorageScope.APPLICATION,
+			this._appStorage.getBoolean('nova.telemetry.optIn', StorageScope.APPLICATION, false));
 		const didOptOut = this._appStorage.getBoolean(OPT_OUT_KEY, StorageScope.APPLICATION, true);
 
 		if (this.client) {
@@ -202,7 +203,8 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		if (!this.client) {
 			return;
 		}
-		const didOptIn = this._appStorage.getBoolean('nova.telemetry.optIn', StorageScope.APPLICATION, false);
+		const didOptIn = this._appStorage.getBoolean('sutra.telemetry.optIn', StorageScope.APPLICATION,
+			this._appStorage.getBoolean('nova.telemetry.optIn', StorageScope.APPLICATION, false));
 		const didOptOut = this._appStorage.getBoolean(OPT_OUT_KEY, StorageScope.APPLICATION, true);
 		if (!didOptIn || didOptOut) {
 			return;
@@ -214,10 +216,12 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 	setOptOut: IMetricsService['setOptOut'] = (newVal: boolean) => {
 		if (newVal) {
 			this._appStorage.store(OPT_OUT_KEY, 'true', StorageScope.APPLICATION, StorageTarget.MACHINE);
+			this._appStorage.store('sutra.telemetry.optIn', 'false', StorageScope.APPLICATION, StorageTarget.MACHINE);
 			this._appStorage.store('nova.telemetry.optIn', 'false', StorageScope.APPLICATION, StorageTarget.MACHINE);
 			this.client?.optOut();
 		} else {
 			this._appStorage.remove(OPT_OUT_KEY, StorageScope.APPLICATION);
+			this._appStorage.store('sutra.telemetry.optIn', 'true', StorageScope.APPLICATION, StorageTarget.MACHINE);
 			this._appStorage.store('nova.telemetry.optIn', 'true', StorageScope.APPLICATION, StorageTarget.MACHINE);
 			this.client?.optIn();
 		}

@@ -21,7 +21,7 @@ import { diffChunkIds } from '../common/codeContextIndexDiff.js';
 
 /**
  * Orchestrates codebase-wide semantic retrieval: provisions a local project per
- * workspace under `.nova/index.db`, runs an initial workspace embedding pass on startup,
+ * workspace under `.sutra/index.db`, runs an initial workspace embedding pass on startup,
  * and maintains continuous incremental re-indexing via a debounced file-system watcher.
  */
 export interface ICodeContextIndexService {
@@ -69,7 +69,7 @@ class CodeContextIndexService extends Disposable implements ICodeContextIndexSer
 			const resources = [...e.rawAdded, ...e.rawUpdated, ...e.rawDeleted];
 			for (const resource of resources) {
 				const path = resource.fsPath;
-				if (path.includes('.git') || path.includes('node_modules') || path.includes('.nova') || path.includes('out/')) {
+				if (path.includes('.git') || path.includes('node_modules') || path.includes('.sutra') || path.includes('.nova') || path.includes('out/')) {
 					continue;
 				}
 

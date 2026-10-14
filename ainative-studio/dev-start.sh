@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Nova IDE Development Start Script
+# Sutra IDE Development Start Script
 set -e
 
-echo "🚀 Starting Nova IDE Development Environment..."
+echo "🚀 Starting Sutra IDE Development Environment..."
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then

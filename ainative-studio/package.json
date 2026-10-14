@@ -269,10 +269,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ranveerd11/nova-ide.git"
+    "url": "https://github.com/ranveerd11/sutra-ide.git"
   },
   "bugs": {
-    "url": "https://github.com/ranveerd11/nova-ide/issues"
+    "url": "https://github.com/ranveerd11/sutra-ide/issues"
   },
   "optionalDependencies": {
     "kerberos": "2.1.1",

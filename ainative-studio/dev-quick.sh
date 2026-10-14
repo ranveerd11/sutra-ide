@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Nova IDE Quick Development Script
+# Sutra IDE Quick Development Script
 # For when you just want to run the app quickly (assumes build is already done)
 
-echo "⚡ Quick starting Nova IDE..."
+echo "⚡ Quick starting Sutra IDE..."
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then

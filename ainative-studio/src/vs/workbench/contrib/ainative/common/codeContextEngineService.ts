@@ -14,7 +14,7 @@ import { chunkFileContent } from './codeContextChunking.js';
 /**
  * Local-First Code Context Engine Service
  * Provides in-process, offline-first codebase-wide semantic retrieval and vector storage
- * stored in SQLite under `.nova/index.db`, completely eliminating remote ZeroDB dependencies.
+ * stored in SQLite under `.sutra/index.db`, completely eliminating remote ZeroDB dependencies.
  */
 
 export interface EnsureProjectResult {
@@ -121,7 +121,16 @@ export class CodeContextEngineService extends Disposable implements ICodeContext
 				try {
 					if (typeof require !== 'undefined') {
 						const pathMod = require('path');
-						dbPath = pathMod.join(folder.uri.fsPath, '.nova', 'index.db');
+						const fsMod = require('fs');
+						const sutraDb = pathMod.join(folder.uri.fsPath, '.sutra', 'index.db');
+						const legacyDb = pathMod.join(folder.uri.fsPath, '.nova', 'index.db');
+						if (fsMod.existsSync?.(sutraDb)) {
+							dbPath = sutraDb;
+						} else if (fsMod.existsSync?.(legacyDb)) {
+							dbPath = legacyDb;
+						} else {
+							dbPath = sutraDb;
+						}
 					}
 				} catch {
 					// Fall back to memory
