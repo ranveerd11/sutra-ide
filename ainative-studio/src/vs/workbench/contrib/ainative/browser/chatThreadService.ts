@@ -51,6 +51,7 @@ import { MessageMetadata } from '../common/chatThreadServiceTypes.js';
 import { IShadowWorkspaceService, FileDiff } from '../common/shadowWorkspaceService.js';
 import { IShadowTypeCheckService, ShadowTypeCheckResult } from '../common/shadowTypeCheckService.js';
 import { IShadowTestRunnerService, ShadowTestResult } from '../common/shadowTestRunnerService.js';
+import { IShadowSelfHealingService, ShadowSelfHealingVerification } from '../common/shadowSelfHealingService.js';
 
 
 // related to retrying when LLM message has error
@@ -160,6 +161,11 @@ export type ThreadType = {
 		 * field, which parses back as undefined = off, so no migration is needed.
 		 */
 		shadowModeEnabled?: boolean;
+		/**
+		 * Autonomous self-healing loop in shadow workspace. When true (default),
+		 * compiler errors and test failures prompt the agent to self-correct before presenting diffs.
+		 */
+		selfHealingEnabled?: boolean;
 
 	};
 }
@@ -337,6 +343,7 @@ export interface IChatThreadService {
 	getShadowTypeCheckResult(threadId: string): Promise<ShadowTypeCheckResult>;
 	runShadowTests(threadId: string): Promise<ShadowTestResult>;
 	getShadowTestResult(threadId: string): Promise<ShadowTestResult>;
+	getShadowSelfHealingResult(threadId: string): Promise<ShadowSelfHealingVerification>;
 }
 
 // #159 phase 2 bullet 3 (design doc §4 "Real file changes underneath a shadow copy"): thrown by
@@ -400,6 +407,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IShadowWorkspaceService private readonly _shadowWorkspaceService: IShadowWorkspaceService,
 		@IShadowTypeCheckService private readonly _shadowTypeCheckService: IShadowTypeCheckService,
 		@IShadowTestRunnerService private readonly _shadowTestRunnerService: IShadowTestRunnerService,
+		@IShadowSelfHealingService private readonly _shadowSelfHealingService: IShadowSelfHealingService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -700,6 +708,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		return this._shadowTestRunnerService.runShadowTests(threadId);
 	}
 
+	async getShadowSelfHealingResult(threadId: string): Promise<ShadowSelfHealingVerification> {
+		return this._shadowSelfHealingService.verifyShadowWorkspace(threadId);
+	}
+
 	// Accepts every pending shadow diff for a thread: 'modified' files go through the normal
 	// DiffZone accept path (keeps the already-materialized newContent in the model, then saves it to
 	// disk via voidModelService.saveModel - the same save step rewrite_file/edit_file would
@@ -983,6 +995,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		let nMessagesSent = 0
 		let shouldSendAnotherMessage = true
 		let isRunningWhenEnd: IsRunningType = undefined
+		let selfHealingAttempts = 0
+		const MAX_SELF_HEALING_ATTEMPTS = 2
 
 		// before enter loop, call tool
 		if (callThisToolFirst) {
@@ -1124,6 +1138,32 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					else { shouldSendAnotherMessage = true }
 
 					this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
+				} else {
+					// Speculative self-healing verification
+					const thread = this.state.allThreads[threadId]
+					const shadowModeEnabled = !!thread?.state.shadowModeEnabled
+					const selfHealingEnabled = thread?.state.selfHealingEnabled !== false
+
+					if (shadowModeEnabled && selfHealingEnabled && selfHealingAttempts < MAX_SELF_HEALING_ATTEMPTS && !interruptedWhenIdle) {
+						try {
+							const verification = await this._shadowSelfHealingService.verifyShadowWorkspace(threadId)
+							if (!verification.passed && verification.formattedFeedback) {
+								selfHealingAttempts += 1
+								const healingMsg: ChatMessage = {
+									role: 'user',
+									content: verification.formattedFeedback,
+									displayContent: verification.formattedFeedback,
+									selections: null,
+									state: { stagingSelections: [], isBeingEdited: false }
+								}
+								this._addMessageToThread(threadId, healingMsg)
+								shouldSendAnotherMessage = true
+								this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+							}
+						} catch (e) {
+							console.error('Error in shadow workspace self-healing verification:', e)
+						}
+					}
 				}
 
 			} // end while (attempts)
