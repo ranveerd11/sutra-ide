@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# AINative Studio Quick Development Script
+# Nova IDE Quick Development Script
 # For when you just want to run the app quickly (assumes build is already done)
 
-echo "⚡ Quick starting AINative Studio..."
+echo "⚡ Quick starting Nova IDE..."
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then

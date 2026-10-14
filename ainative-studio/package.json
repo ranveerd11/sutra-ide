@@ -269,10 +269,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/microsoft/vscode.git"
+    "url": "https://github.com/ranveerd11/nova-ide.git"
   },
   "bugs": {
-    "url": "https://github.com/microsoft/vscode/issues"
+    "url": "https://github.com/ranveerd11/nova-ide/issues"
   },
   "optionalDependencies": {
     "kerberos": "2.1.1",

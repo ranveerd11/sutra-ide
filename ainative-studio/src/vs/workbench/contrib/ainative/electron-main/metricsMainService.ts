@@ -40,7 +40,7 @@ const osInfo = _getOSInfo()
 export class MetricsMainService extends Disposable implements IMetricsService {
 	_serviceBrand: undefined;
 
-	private readonly client: PostHog
+	private readonly client: PostHog | null
 
 	private _initProperties: object = {}
 
@@ -118,9 +118,14 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		@IApplicationStorageMainService private readonly _appStorage: IApplicationStorageMainService,
 	) {
 		super()
-		this.client = new PostHog('phc_UanIdujHiLp55BkUTjB1AuBXcasVkdqRwgnwRlWESH2', {
-			host: 'https://us.i.posthog.com',
-		})
+		const posthogKey = (typeof process !== 'undefined' && (process.env['NOVA_POSTHOG_KEY'] || process.env['POSTHOG_KEY'])) || '';
+		const posthogHost = (typeof process !== 'undefined' && (process.env['NOVA_POSTHOG_HOST'] || process.env['POSTHOG_HOST'])) || 'https://us.i.posthog.com';
+
+		if (posthogKey) {
+			this.client = new PostHog(posthogKey, { host: posthogHost });
+		} else {
+			this.client = null;
+		}
 
 		this.initialize() // async
 	}
@@ -144,7 +149,7 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		// Migrate
 		this._appStorage.store(OPT_OUT_KEY, legacyData, StorageScope.APPLICATION, StorageTarget.MACHINE);
 		this._appStorage.remove(LEGACY_OPT_OUT_KEY, StorageScope.APPLICATION);
-		console.log('[AINative Migration] Successfully migrated opt-out setting from void.app.optOutAll to ainative.app.optOutAll');
+		console.log('[Nova Migration] Successfully migrated opt-out setting from void.app.optOutAll to ainative.app.optOutAll');
 	}
 
 	async initialize() {
@@ -178,34 +183,43 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 			properties: this._initProperties,
 		}
 
-		const didOptOut = this._appStorage.getBoolean(OPT_OUT_KEY, StorageScope.APPLICATION, false)
+		// Strict opt-in: telemetry is disabled unless explicitly opted in
+		const didOptIn = this._appStorage.getBoolean('nova.telemetry.optIn', StorageScope.APPLICATION, false);
+		const didOptOut = this._appStorage.getBoolean(OPT_OUT_KEY, StorageScope.APPLICATION, true);
 
-		console.log('User is opted out of basic Void metrics?', didOptOut)
-		if (didOptOut) {
-			this.client.optOut()
+		if (this.client) {
+			if (didOptIn && !didOptOut) {
+				this.client.optIn();
+				this.client.identify(identifyMessage);
+			} else {
+				this.client.optOut();
+			}
 		}
-		else {
-			this.client.optIn()
-			this.client.identify(identifyMessage)
-		}
-
-
-		console.log('Void posthog metrics info:', JSON.stringify(identifyMessage, null, 2))
 	}
 
 
 	capture: IMetricsService['capture'] = (event, params) => {
-		const capture = { distinctId: this.distinctId, event, properties: params } as const
-		// console.log('full capture:', this.distinctId)
-		this.client.capture(capture)
+		if (!this.client) {
+			return;
+		}
+		const didOptIn = this._appStorage.getBoolean('nova.telemetry.optIn', StorageScope.APPLICATION, false);
+		const didOptOut = this._appStorage.getBoolean(OPT_OUT_KEY, StorageScope.APPLICATION, true);
+		if (!didOptIn || didOptOut) {
+			return;
+		}
+		const capture = { distinctId: this.distinctId, event, properties: params } as const;
+		this.client.capture(capture);
 	}
 
 	setOptOut: IMetricsService['setOptOut'] = (newVal: boolean) => {
 		if (newVal) {
-			this._appStorage.store(OPT_OUT_KEY, 'true', StorageScope.APPLICATION, StorageTarget.MACHINE)
-		}
-		else {
-			this._appStorage.remove(OPT_OUT_KEY, StorageScope.APPLICATION)
+			this._appStorage.store(OPT_OUT_KEY, 'true', StorageScope.APPLICATION, StorageTarget.MACHINE);
+			this._appStorage.store('nova.telemetry.optIn', 'false', StorageScope.APPLICATION, StorageTarget.MACHINE);
+			this.client?.optOut();
+		} else {
+			this._appStorage.remove(OPT_OUT_KEY, StorageScope.APPLICATION);
+			this._appStorage.store('nova.telemetry.optIn', 'true', StorageScope.APPLICATION, StorageTarget.MACHINE);
+			this.client?.optIn();
 		}
 	}
 

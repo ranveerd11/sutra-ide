@@ -496,10 +496,10 @@ const SimpleModelSettingsDialog = ({
 
 				{/* Display model recognition status */}
 				<div className="text-sm text-ainative-fg-3 mb-4">
-					{type === 'default' ? `${modelName} comes packaged with AINative Studio, so you shouldn't need to change these settings.`
+					{type === 'default' ? `${modelName} comes configured with Nova IDE, so you shouldn't need to change these settings.`
 						: isUnrecognizedModel
-							? `Model not recognized by AINative Studio.`
-							: `AINative Studio recognizes ${modelName} ("${recognizedModelName}").`}
+							? `Model not recognized by Nova IDE.`
+							: `Nova IDE recognizes ${modelName} ("${recognizedModelName}").`}
 				</div>
 
 
@@ -1006,7 +1006,7 @@ export const OllamaSetupInstructions = ({ sayWeAutoDetect }: { sayWeAutoDetect?:
 		>
 			<ChatMarkdownRender string={`3. Run \`ollama pull your_model\` to install a model.`} chatMessageLocation={undefined} />
 		</div>
-		{sayWeAutoDetect && <div className=' pl-6'><ChatMarkdownRender string={`AINative Studio automatically detects locally running models and enables them.`} chatMessageLocation={undefined} /></div>}
+		{sayWeAutoDetect && <div className=' pl-6'><ChatMarkdownRender string={`Nova IDE automatically detects locally running models and enables them.`} chatMessageLocation={undefined} /></div>}
 	</div>
 }
 
@@ -1586,14 +1586,14 @@ export const Settings = () => {
 
 					<div className='max-w-3xl'>
 
-						<h1 className='text-2xl w-full'>{`AINative Studio Settings`}</h1>
+						<h1 className='text-2xl w-full'>{`Nova IDE Settings`}</h1>
 
 						<div className='w-full h-[1px] my-2' />
 
 						{/* Account Section */}
 						<ErrorBoundary>
 							<div className='border border-ainative-border-2 bg-ainative-bg-1 py-4 px-4 rounded-md my-4'>
-								<h3 className='text-lg font-medium mb-3'>AINative Cloud Account</h3>
+								<h3 className='text-lg font-medium mb-3'>Cloud & BYOK Account</h3>
 
 								{auth.isAuthenticated ? (
 									<div className='flex items-center gap-4'>
@@ -1624,13 +1624,13 @@ export const Settings = () => {
 								) : (
 									<div className='flex flex-col gap-2'>
 										<p className='text-ainative-fg-3 text-sm mb-2'>
-											Sign in to access AINative Cloud models
+											Bring Your Own Key (BYOK) mode is active. You can also sign in to connect custom cloud endpoints.
 										</p>
 										<AINativeButtonBgDarken
 											className='px-4 py-2 w-fit bg-ainative-accent-solid text-white hover:bg-ainative-accent-solid-hover'
 											onClick={() => setShowLoginModal(true)}
 										>
-											Sign In to AINative Cloud
+											Configure Cloud Account
 										</AINativeButtonBgDarken>
 									</div>
 								)}
@@ -1661,7 +1661,7 @@ export const Settings = () => {
 							<div className={shouldShowTab('localProviders') ? `` : 'hidden'}>
 								<ErrorBoundary>
 									<h2 className={`text-3xl mb-2`}>Local Providers</h2>
-									<h3 className={`text-ainative-fg-3 mb-2`}>{`AINative Studio can access any model that you host locally. We automatically detect your local models by default.`}</h3>
+									<h3 className={`text-ainative-fg-3 mb-2`}>{`Nova IDE can access any model that you host locally. We automatically detect your local models by default.`}</h3>
 
 									<div className='opacity-80 mb-4'>
 										<OllamaSetupInstructions sayWeAutoDetect={true} />
@@ -1675,7 +1675,7 @@ export const Settings = () => {
 							<div className={shouldShowTab('providers') ? `` : 'hidden'}>
 								<ErrorBoundary>
 									<h2 className={`text-3xl mb-2`}>Main Providers</h2>
-									<h3 className={`text-ainative-fg-3 mb-2`}>{`AINative Studio can access models from Anthropic, OpenAI, OpenRouter, and more.`}</h3>
+									<h3 className={`text-ainative-fg-3 mb-2`}>{`Nova IDE can connect to external LLM providers using your own API keys.`}</h3>
 
 									<AINativeProviderSettings providerNames={nonlocalProviderNames} />
 								</ErrorBoundary>
@@ -1815,7 +1815,7 @@ export const Settings = () => {
 
 										<div className='w-full'>
 											<h4 className={`text-base`}>Editor</h4>
-											<div className='text-sm text-ainative-fg-3 mt-1'>{`Settings that control the visibility of AINative Studio suggestions in the code editor.`}</div>
+											<div className='text-sm text-ainative-fg-3 mt-1'>{`Settings that control the visibility of Nova IDE suggestions in the code editor.`}</div>
 
 											<div className='my-2'>
 												{/* Auto Accept Switch */}
@@ -1893,7 +1893,7 @@ export const Settings = () => {
 								<div>
 									<ErrorBoundary>
 										<h2 className='text-3xl mb-2'>One-Click Switch</h2>
-										<h4 className='text-ainative-fg-3 mb-4'>{`Transfer your editor settings into AINative Studio.`}</h4>
+										<h4 className='text-ainative-fg-3 mb-4'>{`Transfer your editor settings into Nova IDE.`}</h4>
 
 										<div className='flex flex-col gap-2'>
 											<OneClickSwitchButton className='w-48' fromEditor="VS Code" />
@@ -1906,7 +1906,7 @@ export const Settings = () => {
 								{/* Import/Export section */}
 								<div>
 									<h2 className='text-3xl mb-2'>Import/Export</h2>
-									<h4 className='text-ainative-fg-3 mb-4'>{`Transfer AINative Studio's settings and chats in and out of AINative Studio.`}</h4>
+									<h4 className='text-ainative-fg-3 mb-4'>{`Transfer Nova IDE's settings and chats in and out of Nova IDE.`}</h4>
 									<div className='flex flex-col gap-8'>
 										{/* Settings Subcategory */}
 										<div className='flex flex-col gap-2 max-w-48 w-full'>
@@ -1967,7 +1967,7 @@ export const Settings = () => {
 								{/* Metrics section */}
 								<div className='max-w-[600px]'>
 									<h2 className={`text-3xl mb-2`}>Metrics</h2>
-									<h4 className={`text-ainative-fg-3 mb-4`}>Very basic anonymous usage tracking helps us keep AINative Studio running smoothly. You may opt out below. Regardless of this setting, AINative Studio never sees your code, messages, or API keys.</h4>
+									<h4 className={`text-ainative-fg-3 mb-4`}>Very basic anonymous usage tracking is disabled by default in Nova IDE. You may opt in or opt out below. Regardless of this setting, Nova IDE never sees your code, messages, or API keys.</h4>
 
 									<div className='my-2'>
 										{/* Disable All Metrics Switch */}
@@ -1993,7 +1993,7 @@ export const Settings = () => {
 									<h4 className={`text-ainative-fg-3 mb-4`}>
 										<ChatMarkdownRender inPTag={true} string={`
 Global rules to include with all AI requests.
-Alternatively, place a \`.ainativerules\` file in the root of your workspace.
+Alternatively, place a \`.novarules\` file in the root of your workspace.
 								`} chatMessageLocation={undefined} />
 									</h4>
 									<ErrorBoundary>
@@ -2016,7 +2016,7 @@ Alternatively, place a \`.ainativerules\` file in the root of your workspace.
 											</div>
 										</ErrorBoundary>
 										<div className='text-ainative-fg-3 text-xs mt-1'>
-											{`When disabled, AINative Studio will not include anything in the system message except for content you specified above.`}
+											{`When disabled, Nova IDE will not include anything in the system message except for content you specified above.`}
 										</div>
 									</div>
 								</div>

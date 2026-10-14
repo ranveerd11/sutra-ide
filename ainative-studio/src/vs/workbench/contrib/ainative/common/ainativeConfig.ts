@@ -26,6 +26,9 @@ export interface AINativeConfig {
 	/** Enable/disable community marketplace */
 	enableMarketplace: boolean;
 
+	/** Enable/disable Bring Your Own Key (BYOK) local-first mode */
+	byokMode: boolean;
+
 	/** Current environment (development, production, test) */
 	environment: 'development' | 'production' | 'test';
 
@@ -76,13 +79,14 @@ export interface AINativeConfig {
  * Default configuration values
  */
 const DEFAULT_CONFIG: AINativeConfig = {
-	apiBaseUrl: 'https://api.ainative.studio',
+	apiBaseUrl: '',
 	apiTimeout: 30000,
-	enableAuth: true,
+	enableAuth: false,
 	enableAIModels: true,
-	enableMarketplace: true,
+	enableMarketplace: false,
+	byokMode: true,
 	environment: 'production',
-	encryptionKeyId: 'ainative-auth-tokens',
+	encryptionKeyId: 'nova-auth-tokens',
 	tokenStorageProvider: 'electron-safe-storage',
 	sessionTimeout: 1800000, // 30 minutes
 	sessionCheckInterval: 60000, // 1 minute
@@ -141,12 +145,17 @@ export function getAINativeConfig(): AINativeConfig {
 	const environment = nodeEnv === 'development' ? 'development' :
 		nodeEnv === 'test' ? 'test' : 'production';
 
+	const configuredUrl = process.env['NOVA_API_BASE_URL'] || process.env['AINATIVE_API_BASE_URL'];
+	const byokMode = parseBool(process.env['NOVA_BYOK'], !configuredUrl);
+	const apiBaseUrl = configuredUrl || (environment === 'test' ? 'https://api.ainative.studio' : (byokMode ? '' : 'https://api.ainative.studio'));
+
 	return {
-		apiBaseUrl: process.env['AINATIVE_API_BASE_URL'] || DEFAULT_CONFIG.apiBaseUrl,
-		apiTimeout: parseInt(process.env['AINATIVE_API_TIMEOUT'], DEFAULT_CONFIG.apiTimeout),
-		enableAuth: parseBool(process.env['ENABLE_AINATIVE_AUTH'], DEFAULT_CONFIG.enableAuth),
+		apiBaseUrl,
+		apiTimeout: parseInt(process.env['NOVA_API_TIMEOUT'] || process.env['AINATIVE_API_TIMEOUT'], DEFAULT_CONFIG.apiTimeout),
+		enableAuth: parseBool(process.env['ENABLE_NOVA_AUTH'] || process.env['ENABLE_AINATIVE_AUTH'], DEFAULT_CONFIG.enableAuth),
 		enableAIModels: parseBool(process.env['ENABLE_AI_MODELS'], DEFAULT_CONFIG.enableAIModels),
 		enableMarketplace: parseBool(process.env['ENABLE_MARKETPLACE'], DEFAULT_CONFIG.enableMarketplace),
+		byokMode,
 		environment,
 		encryptionKeyId: process.env['ENCRYPTION_KEY_ID'] || DEFAULT_CONFIG.encryptionKeyId,
 		tokenStorageProvider: (process.env['TOKEN_STORAGE_PROVIDER'] as any) || DEFAULT_CONFIG.tokenStorageProvider,
@@ -194,7 +203,7 @@ export function validateConfig(config: AINativeConfig): string[] {
 	}
 
 	// General security checks
-	if (!config.apiBaseUrl.startsWith('https://') && config.enforceHttps) {
+	if (config.apiBaseUrl && !config.apiBaseUrl.startsWith('https://') && config.enforceHttps) {
 		errors.push('API base URL must use HTTPS when HTTPS enforcement is enabled');
 	}
 

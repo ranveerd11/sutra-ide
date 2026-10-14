@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# AINative Studio Development Start Script
+# Nova IDE Development Start Script
 set -e
 
-echo "🚀 Starting AINative Studio Development Environment..."
+echo "🚀 Starting Nova IDE Development Environment..."
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then

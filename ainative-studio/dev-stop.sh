@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# AINative Studio Development Stop Script
+# Nova IDE Development Stop Script
 
-echo "🛑 Stopping AINative Studio Development Environment..."
+echo "🛑 Stopping Nova IDE Development Environment..."
 
 # Kill watch processes
 echo "   Stopping watch processes..."
