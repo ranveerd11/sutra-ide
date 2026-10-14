@@ -50,6 +50,7 @@ import { IUsageTrackingService } from '../common/usageTrackingService.js';
 import { MessageMetadata } from '../common/chatThreadServiceTypes.js';
 import { IShadowWorkspaceService, FileDiff } from '../common/shadowWorkspaceService.js';
 import { IShadowTypeCheckService, ShadowTypeCheckResult } from '../common/shadowTypeCheckService.js';
+import { IShadowTestRunnerService, ShadowTestResult } from '../common/shadowTestRunnerService.js';
 
 
 // related to retrying when LLM message has error
@@ -334,6 +335,8 @@ export interface IChatThreadService {
 	// would be a poor fit. Only meaningful for a thread with shadowModeEnabled; returns
 	// `{ status: 'no-toolchain', diagnostics: [] }` otherwise.
 	getShadowTypeCheckResult(threadId: string): Promise<ShadowTypeCheckResult>;
+	runShadowTests(threadId: string): Promise<ShadowTestResult>;
+	getShadowTestResult(threadId: string): Promise<ShadowTestResult>;
 }
 
 // #159 phase 2 bullet 3 (design doc §4 "Real file changes underneath a shadow copy"): thrown by
@@ -396,6 +399,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IUsageTrackingService private readonly _usageTrackingService: IUsageTrackingService,
 		@IShadowWorkspaceService private readonly _shadowWorkspaceService: IShadowWorkspaceService,
 		@IShadowTypeCheckService private readonly _shadowTypeCheckService: IShadowTypeCheckService,
+		@IShadowTestRunnerService private readonly _shadowTestRunnerService: IShadowTestRunnerService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -685,7 +689,15 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	// getPendingShadowDiffs, which materializes DiffZones) - a failed/empty type-check result should
 	// never block or alter promote/discard, only inform the user's decision to use them.
 	async getShadowTypeCheckResult(threadId: string): Promise<ShadowTypeCheckResult> {
-		return this._shadowTypeCheckService.typeCheckShadow(threadId)
+		return this._shadowTypeCheckService.typeCheckShadow(threadId);
+	}
+
+	async runShadowTests(threadId: string): Promise<ShadowTestResult> {
+		return this._shadowTestRunnerService.runShadowTests(threadId);
+	}
+
+	async getShadowTestResult(threadId: string): Promise<ShadowTestResult> {
+		return this._shadowTestRunnerService.runShadowTests(threadId);
 	}
 
 	// Accepts every pending shadow diff for a thread: 'modified' files go through the normal
