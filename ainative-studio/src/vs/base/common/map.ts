@@ -356,40 +356,52 @@ export class LinkedMap<K, V> implements Map<K, V> {
 		}
 	}
 
-	*keys(): MapIterator<K> {
+	keys(): MapIterator<K> {
+		const map = this;
 		const state = this._state;
 		let current = this._head;
-		while (current) {
-			if (this._state !== state) {
-				throw new Error(`LinkedMap got modified during iteration.`);
+		return (function* (): Generator<K, undefined, void> {
+			while (current) {
+				if (map._state !== state) {
+					throw new Error(`LinkedMap got modified during iteration.`);
+				}
+				yield current.key;
+				current = current.next;
 			}
-			yield current.key;
-			current = current.next;
-		}
+			return undefined;
+		})() as unknown as MapIterator<K>;
 	}
 
-	*values(): MapIterator<V> {
+	values(): MapIterator<V> {
+		const map = this;
 		const state = this._state;
 		let current = this._head;
-		while (current) {
-			if (this._state !== state) {
-				throw new Error(`LinkedMap got modified during iteration.`);
+		return (function* (): Generator<V, undefined, void> {
+			while (current) {
+				if (map._state !== state) {
+					throw new Error(`LinkedMap got modified during iteration.`);
+				}
+				yield current.value;
+				current = current.next;
 			}
-			yield current.value;
-			current = current.next;
-		}
+			return undefined;
+		})() as unknown as MapIterator<V>;
 	}
 
-	*entries(): MapIterator<[K, V]> {
+	entries(): MapIterator<[K, V]> {
+		const map = this;
 		const state = this._state;
 		let current = this._head;
-		while (current) {
-			if (this._state !== state) {
-				throw new Error(`LinkedMap got modified during iteration.`);
+		return (function* (): Generator<[K, V], undefined, void> {
+			while (current) {
+				if (map._state !== state) {
+					throw new Error(`LinkedMap got modified during iteration.`);
+				}
+				yield [current.key, current.value];
+				current = current.next;
 			}
-			yield [current.key, current.value];
-			current = current.next;
-		}
+			return undefined;
+		})() as unknown as MapIterator<[K, V]>;
 	}
 
 	[Symbol.iterator](): MapIterator<[K, V]> {

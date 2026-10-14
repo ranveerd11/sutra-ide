@@ -397,17 +397,17 @@ export class AINativeAuthService extends Disposable implements IAINativeSessionA
 	 * Refresh expired access token
 	 */
 	async refreshToken(): Promise<string> {
-		if (!this._refreshToken) {
-			throw new AINativeAuthError(
-				AINativeAuthErrorCode.TokenRefreshFailed,
-				'No refresh token available'
-			);
-		}
-
 		this._authState = AuthState.Refreshing;
 		this._onDidChangeAuthState.fire(this._authState);
 
 		try {
+			if (!this._refreshToken) {
+				throw new AINativeAuthError(
+					AINativeAuthErrorCode.TokenRefreshFailed,
+					'No refresh token available'
+				);
+			}
+
 			const response = await fetch(`${AINativeAuthService.API_BASE}/v1/auth/refresh`, {
 				method: 'POST',
 				headers: {

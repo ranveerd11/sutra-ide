@@ -57,7 +57,7 @@ echo "⏳ Waiting for initial compilation..."
 sleep 10
 
 # Check if React components need building
-if [ ! -d "src/vs/workbench/contrib/void/browser/react/out" ]; then
+if [ ! -d "src/vs/workbench/contrib/ainative/browser/react/out" ]; then
     echo "⚛️  Building React components..."
     npm run buildreact
 fi

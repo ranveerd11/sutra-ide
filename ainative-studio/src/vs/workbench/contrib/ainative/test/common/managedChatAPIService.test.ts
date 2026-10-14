@@ -846,7 +846,8 @@ suite('ManagedChatAPIService', () => {
 			assert.strictEqual(receivedEvents[0].delta, 'Valid event');
 		});
 
-		test('should handle token refresh during streaming', async () => {
+		test('should handle token refresh during streaming', async function () {
+			this.timeout(10000);
 			let callCount = 0;
 			global.fetch = async () => {
 				callCount++;

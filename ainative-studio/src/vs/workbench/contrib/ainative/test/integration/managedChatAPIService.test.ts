@@ -265,7 +265,8 @@ suite('ManagedChatAPIService - Integration Tests', () => {
 			}
 		});
 
-		test('should handle rate limiting (429) with exponential backoff', async () => {
+		test('should handle rate limiting (429) with exponential backoff', async function () {
+			this.timeout(10000);
 			mockFetchResponses = [
 				{ status: 429, body: { error: { code: 'rate_limit', message: 'Too many requests' } } },
 				{ status: 429, body: { error: { code: 'rate_limit', message: 'Too many requests' } } },

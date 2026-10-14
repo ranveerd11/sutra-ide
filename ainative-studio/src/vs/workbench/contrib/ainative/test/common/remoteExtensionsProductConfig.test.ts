@@ -6,6 +6,9 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // #165: the bundled open-remote-ssh/open-remote-wsl extensions (extensions/open-remote-ssh,
 // extensions/open-remote-wsl) declare `enabledApiProposals: ['resolvers', 'contribViewsRemote']`

@@ -41,17 +41,47 @@ export const IGenerateCommitMessageService = createDecorator<IGenerateCommitMess
 
 const loadingContextKey = 'ainativeSCMGenerateCommitMessageLoading'
 
+export class AINativeSCMService implements IAINativeSCMService {
+	readonly _serviceBrand: undefined;
+	private readonly proxy: IAINativeSCMService;
+
+	constructor(@IMainProcessService mainProcessService: IMainProcessService) {
+		this.proxy = ProxyChannel.toService<IAINativeSCMService>(mainProcessService.getChannel('ainative-channel-scm'));
+	}
+
+	gitStat(path: string): Promise<string> {
+		return this.proxy.gitStat(path);
+	}
+
+	gitSampledDiffs(path: string): Promise<string> {
+		return this.proxy.gitSampledDiffs(path);
+	}
+
+	gitBranch(path: string): Promise<string> {
+		return this.proxy.gitBranch(path);
+	}
+
+	gitLog(path: string): Promise<string> {
+		return this.proxy.gitLog(path);
+	}
+
+	gitRemoteUrl(path: string): Promise<string> {
+		return this.proxy.gitRemoteUrl(path);
+	}
+}
+
+registerSingleton(IAINativeSCMService, AINativeSCMService, InstantiationType.Delayed);
+
 class GenerateCommitMessageService extends Disposable implements IGenerateCommitMessageService {
 	readonly _serviceBrand: undefined;
 	private readonly execute = new ThrottledDelayer(300)
 	private llmRequestId: string | null = null
 	private currentRequestId: string | null = null
-	private ainativeSCM: IAINativeSCMService
 	private loadingContextKey: IContextKey<boolean>
 
 	constructor(
 		@ISCMService private readonly scmService: ISCMService,
-		@IMainProcessService mainProcessService: IMainProcessService,
+		@IAINativeSCMService private readonly ainativeSCM: IAINativeSCMService,
 		@IAINativeSettingsService private readonly ainativeSettingsService: IAINativeSettingsService,
 		@IConvertToLLMMessageService private readonly convertToLLMMessageService: IConvertToLLMMessageService,
 		@ILLMMessageService private readonly llmMessageService: ILLMMessageService,
@@ -60,7 +90,6 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 	) {
 		super()
 		this.loadingContextKey = this.contextKeyService.createKey(loadingContextKey, false)
-		this.ainativeSCM = ProxyChannel.toService<IAINativeSCMService>(mainProcessService.getChannel('ainative-channel-scm'))
 	}
 
 	override dispose() {

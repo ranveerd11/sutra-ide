@@ -4,6 +4,9 @@
  *--------------------------------------------------------------------------------------*/
 
 
+// register source control management
+import './ainativeSCMService.js'
+
 // register inline diffs
 import './editCodeService.js'
 
@@ -79,9 +82,6 @@ import './miscWokrbenchContrib.js'
 
 // register file service (for explorer context menu)
 import './fileService.js'
-
-// register source control management
-import './ainativeSCMService.js'
 
 // register hooks (event-driven agent automation, #162)
 import './hooksService.js'

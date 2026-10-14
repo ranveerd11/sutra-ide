@@ -44,9 +44,19 @@
  * - No pyright/eslint support yet - TypeScript only, per the task's explicit "start with" guidance.
  */
 
-import { execFile } from 'child_process';
-import * as path from 'path';
+import * as path from '../../../../base/common/path.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
+
+function getNodeBuiltin<T = any>(name: string): T | undefined {
+	if (typeof process !== 'undefined' && typeof (process as any).getBuiltinModule === 'function') {
+		try {
+			return (process as any).getBuiltinModule(name);
+		} catch {
+			return undefined;
+		}
+	}
+	return undefined;
+}
 import { URI } from '../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
@@ -319,11 +329,16 @@ export class ShadowTypeCheckService extends Disposable implements IShadowTypeChe
 
 	private _runTsc(tscBin: string, shadowTsconfigUri: URI, shadowRootUri: URI): Promise<string> {
 		return new Promise<string>((resolve, reject) => {
-			execFile(
+			const execFileFn = getNodeBuiltin('child_process')?.execFile;
+			if (!execFileFn) {
+				reject(new Error('child_process is not available in this environment'));
+				return;
+			}
+			execFileFn(
 				tscBin,
 				['--noEmit', '-p', shadowTsconfigUri.fsPath, '--pretty', 'false'],
 				{ cwd: shadowRootUri.fsPath, timeout: TSC_TIMEOUT_MS, maxBuffer: MAX_STDOUT_BYTES },
-				(error, stdout) => {
+				(error: any, stdout: any) => {
 					// tsc exits non-zero (1 = compiler errors reported, 2 = diagnostics found) whenever
 					// it finds anything to report - that is the expected, successful-run outcome here,
 					// not a failure. Only a genuine spawn failure (ENOENT, timeout killing the process,
@@ -354,7 +369,8 @@ export class ShadowTypeCheckService extends Disposable implements IShadowTypeChe
 	 * genuinely nothing to run yet.
 	 */
 	private async _resolveTscBinaryPath(startDirFsPath: string): Promise<string | undefined> {
-		const binName = process.platform === 'win32' ? 'tsc.cmd' : 'tsc';
+		const isWindows = typeof process !== 'undefined' ? process.platform === 'win32' : false;
+		const binName = isWindows ? 'tsc.cmd' : 'tsc';
 
 		let dir = startDirFsPath;
 		for (; ;) {
@@ -375,8 +391,14 @@ export class ShadowTypeCheckService extends Disposable implements IShadowTypeChe
 
 	private _isOnPath(binName: string): Promise<boolean> {
 		return new Promise<boolean>((resolve) => {
-			const checkCommand = process.platform === 'win32' ? 'where' : 'which';
-			execFile(checkCommand, [binName], (error) => resolve(!error));
+			const execFileFn = getNodeBuiltin('child_process')?.execFile;
+			if (!execFileFn) {
+				resolve(false);
+				return;
+			}
+			const isWindows = typeof process !== 'undefined' ? process.platform === 'win32' : false;
+			const checkCommand = isWindows ? 'where' : 'which';
+			execFileFn(checkCommand, [binName], (error: any) => resolve(!error));
 		});
 	}
 

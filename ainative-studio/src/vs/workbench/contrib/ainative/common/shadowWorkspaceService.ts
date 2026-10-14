@@ -23,9 +23,7 @@
  *   ensureNodeModulesLinked rather than duplicating that logic.
  */
 
-import { tmpdir } from 'os';
-import * as path from 'path';
-import * as fs from 'fs';
+import * as path from '../../../../base/common/path.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
@@ -163,6 +161,32 @@ const SHADOW_ROOT_FOLDER_NAME = 'ainative-shadow';
 // Design doc §3.1/§4's own "older than, say, 24h" framing for the startup orphan sweep.
 const DEFAULT_ORPHAN_SWEEP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+function getNodeBuiltin<T = any>(name: string): T | undefined {
+	if (typeof process !== 'undefined' && typeof (process as any).getBuiltinModule === 'function') {
+		try {
+			return (process as any).getBuiltinModule(name);
+		} catch {
+			return undefined;
+		}
+	}
+	return undefined;
+}
+
+function getTmpDir(): string {
+	const nodeOs = getNodeBuiltin('os');
+	if (nodeOs?.tmpdir) {
+		return nodeOs.tmpdir();
+	}
+	if (typeof process !== 'undefined' && process?.env) {
+		return process.env['TMPDIR'] || process.env['TEMP'] || process.env['TMP'] || '/tmp';
+	}
+	return '/tmp';
+}
+
+function getNodeFs(): any {
+	return getNodeBuiltin('fs');
+}
+
 export class ShadowWorkspaceService extends Disposable implements IShadowWorkspaceService {
 	_serviceBrand: undefined;
 
@@ -194,7 +218,7 @@ export class ShadowWorkspaceService extends Disposable implements IShadowWorkspa
 			return this._toShadowWorkspace(threadId, existing);
 		}
 
-		const rootUri = URI.file(path.join(tmpdir(), SHADOW_ROOT_FOLDER_NAME, this._sanitizeForPath(threadId) + '-' + generateUuid().slice(0, 8)));
+		const rootUri = URI.file(path.join(getTmpDir(), SHADOW_ROOT_FOLDER_NAME, this._sanitizeForPath(threadId) + '-' + generateUuid().slice(0, 8)));
 		await this._fileService.createFolder(rootUri);
 
 		const state = { rootUri, syncedFiles: new Map<string, { workspaceRootUri: URI; realUri: URI; baselineRealContent: string | undefined }>() };
@@ -313,7 +337,10 @@ export class ShadowWorkspaceService extends Disposable implements IShadowWorkspa
 			// avoiding the cost of duplicating potentially gigabytes of dependencies on every shadow
 			// workspace. 'dir' is the correct symlink type on Windows for a directory target; ignored
 			// on POSIX platforms where fs.symlink has no notion of typed links.
-			fs.symlinkSync(realNodeModulesFsPath, shadowNodeModulesFsPath, 'dir');
+			const fsMod = getNodeFs();
+			if (fsMod?.symlinkSync) {
+				fsMod.symlinkSync(realNodeModulesFsPath, shadowNodeModulesFsPath, 'dir');
+			}
 		} catch (e) {
 			// Best-effort: a failed symlink (e.g. a permissions issue, or a platform without symlink
 			// support enabled - notably unprivileged Windows accounts) should degrade to "third-party
@@ -349,7 +376,8 @@ export class ShadowWorkspaceService extends Disposable implements IShadowWorkspa
 	 * would be no more correct and strictly slower for a hot, repeatedly-called path. */
 	private _existsOnDisk(fsPath: string): boolean {
 		try {
-			return fs.existsSync(fsPath);
+			const fsMod = getNodeFs();
+			return fsMod ? fsMod.existsSync(fsPath) : false;
 		} catch {
 			return false;
 		}
@@ -382,7 +410,7 @@ export class ShadowWorkspaceService extends Disposable implements IShadowWorkspa
 
 	async sweepOrphanedShadows(opts?: { maxAgeMs?: number }): Promise<string[]> {
 		const maxAgeMs = opts?.maxAgeMs ?? DEFAULT_ORPHAN_SWEEP_MAX_AGE_MS;
-		const shadowRootUri = URI.file(path.join(tmpdir(), SHADOW_ROOT_FOLDER_NAME));
+		const shadowRootUri = URI.file(path.join(getTmpDir(), SHADOW_ROOT_FOLDER_NAME));
 
 		let entries: Awaited<ReturnType<IFileService['resolve']>>['children'];
 		try {
@@ -411,7 +439,12 @@ export class ShadowWorkspaceService extends Disposable implements IShadowWorkspa
 
 			let ageMs: number;
 			try {
-				ageMs = now - fs.statSync(entry.resource.fsPath).mtimeMs;
+				const mtime = typeof entry.mtime === 'number' ? entry.mtime : getNodeFs()?.statSync(entry.resource.fsPath)?.mtimeMs;
+				if (typeof mtime === 'number') {
+					ageMs = now - mtime;
+				} else {
+					continue;
+				}
 			} catch {
 				continue; // disappeared between listing and stat-ing (e.g. raced with another sweep/process) - leave it, nothing to clean up
 			}
@@ -445,7 +478,7 @@ export class ShadowWorkspaceService extends Disposable implements IShadowWorkspa
 		// Used only by shadowUriFor() when called before createShadowForThread() - the returned URI
 		// won't exist on disk yet, but the path mapping is still useful for callers that just want
 		// to know "where would this file go".
-		return URI.file(path.join(tmpdir(), SHADOW_ROOT_FOLDER_NAME, this._sanitizeForPath(threadId)));
+		return URI.file(path.join(getTmpDir(), SHADOW_ROOT_FOLDER_NAME, this._sanitizeForPath(threadId)));
 	}
 
 	private _mapToShadow(shadowRootUri: URI, workspaceRootUri: URI, realFileUri: URI): URI {
