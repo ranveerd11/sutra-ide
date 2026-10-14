@@ -15,47 +15,28 @@ import { URI } from '../../../../base/common/uri.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { ICodeContextEngineService } from '../common/codeContextEngineService.js';
 import { IAINativeSCMService } from '../common/ainativeSCMTypes.js';
-import { IAINativeCloudAuthService } from '../common/ainativeCloudAuthTypes.js';
 import { computeRepoHash } from '../common/codeContextProjectHash.js';
 import { chunkFileContent } from '../common/codeContextChunking.js';
 import { diffChunkIds } from '../common/codeContextIndexDiff.js';
 
 /**
- * Orchestrates #160's codebase-wide semantic retrieval: provisions a ZeroDB project per
- * workspace, runs an initial full-workspace embed pass once signed in, and exposes a manual
- * per-file re-index for incremental updates.
- *
- * Deliberately NOT included in this first version, to keep it small and correct rather than
- * rushed:
- *   - No automatic file-watcher-driven re-embed on save. `reindexFile()` below does the real
- *     work (diff old vs. new chunk ids, delete the stale ones, embed the new ones) and is
- *     fully wired - it is just not yet called automatically from IFileService.onDidFilesChange.
- *     Wiring that trigger is a small, separate follow-up once this manual path is exercised for
- *     real and the actual embedding latency/rate limits are observed.
- *   - No persistence of per-file chunk-id state across IDE restarts (kept in memory only) - a
- *     restart currently means the next initial index pass re-embeds everything, which is
- *     correct (every embed/chunk call is an idempotent upsert) just not minimal. Persisting a
- *     chunk-id manifest is the natural next step once this is proven out.
- *   - No UI (status in the index, progress, a manual "re-index now" button) - this is the
- *     service layer other work can build on.
+ * Orchestrates codebase-wide semantic retrieval: provisions a local project per
+ * workspace under `.nova/index.db`, runs an initial workspace embedding pass on startup,
+ * and maintains continuous incremental re-indexing via a debounced file-system watcher.
  */
 export interface ICodeContextIndexService {
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Ensures a ZeroDB project exists for the current workspace's first folder and runs an
-	 * initial embed pass over every file search finds (respecting files.exclude/.gitignore via
-	 * the real search service, same as VS Code's own file search). No-ops if there is no
-	 * workspace folder open, or the user isn't signed in. Safe to call more than once - project
-	 * provisioning is idempotent server-side, and re-embedding an already-embedded chunk id is a
-	 * correct no-op upsert.
+	 * Ensures a local project exists for the current workspace's first folder and runs an
+	 * initial embed pass over files found by the search service. Operates completely offline.
 	 */
 	indexWorkspace(): Promise<{ projectId: string; filesIndexed: number } | undefined>;
 
-	/** Re-indexes one file: diffs its previous chunk ids against its current content's chunk ids, deletes stale vectors, embeds new ones. */
+	/** Re-indexes one file: diffs previous chunk ids against current ones, deletes stale vectors, and embeds new ones. */
 	reindexFile(projectId: string, fileUri: URI): Promise<void>;
 
-	/** The project id from the most recent indexWorkspace() call, or undefined if indexing hasn't run (yet, or at all) this session. */
+	/** The project id from the most recent indexWorkspace() call, or undefined if indexing hasn't run. */
 	getCurrentProjectId(): string | undefined;
 }
 
@@ -64,9 +45,10 @@ export const ICodeContextIndexService = createDecorator<ICodeContextIndexService
 class CodeContextIndexService extends Disposable implements ICodeContextIndexService {
 	readonly _serviceBrand: undefined;
 
-	// In-memory only for now (see class doc) - resets on restart.
 	private readonly _chunkIdsByFile = new Map<string, string[]>(); // key: fileUri.toString()
 	private _currentProjectId: string | undefined;
+	private _fileChangeDebounceTimer: any = null;
+	private readonly _pendingFilesToReindex = new Set<string>();
 
 	constructor(
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
@@ -75,23 +57,56 @@ class CodeContextIndexService extends Disposable implements ICodeContextIndexSer
 		@ISearchService private readonly searchService: ISearchService,
 		@ICodeContextEngineService private readonly codeContextEngineService: ICodeContextEngineService,
 		@IAINativeSCMService private readonly scmService: IAINativeSCMService,
-		@IAINativeCloudAuthService private readonly authService: IAINativeCloudAuthService,
 	) {
 		super();
+		this._registerFileWatcher();
+	}
+
+	private _registerFileWatcher(): void {
+		this._register(this.fileService.onDidFilesChange(e => {
+			if (!this._currentProjectId) return;
+
+			const resources = [...e.rawAdded, ...e.rawUpdated, ...e.rawDeleted];
+			for (const resource of resources) {
+				const path = resource.fsPath;
+				if (path.includes('.git') || path.includes('node_modules') || path.includes('.nova') || path.includes('out/')) {
+					continue;
+				}
+
+				this._pendingFilesToReindex.add(resource.toString());
+			}
+
+			if (this._pendingFilesToReindex.size > 0) {
+				if (this._fileChangeDebounceTimer) {
+					clearTimeout(this._fileChangeDebounceTimer);
+				}
+				this._fileChangeDebounceTimer = setTimeout(() => {
+					this._processPendingReindexes();
+				}, 500);
+			}
+		}));
+	}
+
+	private async _processPendingReindexes(): Promise<void> {
+		if (!this._currentProjectId) return;
+		const files = Array.from(this._pendingFilesToReindex);
+		this._pendingFilesToReindex.clear();
+
+		for (const uriStr of files) {
+			try {
+				const uri = URI.parse(uriStr);
+				await this.reindexFile(this._currentProjectId, uri);
+			} catch {
+				// Ignore individual file reindex failures
+			}
+		}
 	}
 
 	async indexWorkspace(): Promise<{ projectId: string; filesIndexed: number } | undefined> {
 		const folder = this.workspaceContextService.getWorkspace().folders[0];
 		if (!folder) return undefined;
 
-		const isAuthenticated = await this.authService.getAccessToken();
-		if (!isAuthenticated) return undefined;
-
 		const remoteUrl = await this.scmService.gitRemoteUrl(folder.uri.fsPath);
-		// A repo with no "origin" remote (brand new, never pushed) has no stable identity to
-		// hash - fall back to the folder name so indexing still works locally, at the cost of
-		// colliding with any other never-pushed repo of the same name (acceptable: this is a
-		// fallback for an edge case, not the common path).
 		const repoHash = await computeRepoHash(remoteUrl || `local:${folder.name}`);
 		const project = await this.codeContextEngineService.ensureProject(repoHash, folder.name);
 		this._currentProjectId = project.id;
@@ -106,7 +121,6 @@ class CodeContextIndexService extends Disposable implements ICodeContextIndexSer
 				await this._embedFile(project.id, match.resource);
 				filesIndexed++;
 			} catch {
-				// one unreadable/binary/oversized file shouldn't abort indexing the rest of the workspace
 				continue;
 			}
 		}
@@ -117,7 +131,6 @@ class CodeContextIndexService extends Disposable implements ICodeContextIndexSer
 	async reindexFile(projectId: string, fileUri: URI): Promise<void> {
 		const exists = await this.fileService.exists(fileUri);
 		if (!exists) {
-			// file was deleted - delete all its previously-indexed chunks, nothing to embed
 			const previousChunkIds = this._chunkIdsByFile.get(fileUri.toString()) ?? [];
 			await Promise.all(previousChunkIds.map(id => this.codeContextEngineService.deleteVector(projectId, id)));
 			this._chunkIdsByFile.delete(fileUri.toString());
@@ -136,7 +149,7 @@ class CodeContextIndexService extends Disposable implements ICodeContextIndexSer
 
 		await Promise.all(chunkIdsToDelete.map(id => this.codeContextEngineService.deleteVector(projectId, id)));
 		if (currentChunkIds.length > 0) {
-			await this.codeContextEngineService.embedFile(projectId, fileUri.toString());
+			await this.codeContextEngineService.embedFile(projectId, fileUri.toString(), content);
 		}
 
 		this._chunkIdsByFile.set(fileUri.toString(), currentChunkIds);
@@ -144,6 +157,14 @@ class CodeContextIndexService extends Disposable implements ICodeContextIndexSer
 
 	getCurrentProjectId(): string | undefined {
 		return this._currentProjectId;
+	}
+
+	override dispose(): void {
+		if (this._fileChangeDebounceTimer) {
+			clearTimeout(this._fileChangeDebounceTimer);
+			this._fileChangeDebounceTimer = null;
+		}
+		super.dispose();
 	}
 }
 
