@@ -12,7 +12,16 @@
 /**
  * Supported programming languages for code intelligence
  */
-export type CodeLanguage = 'python' | 'javascript' | 'typescript';
+export type CodeLanguage =
+	| 'python'
+	| 'javascript'
+	| 'typescript'
+	| 'go'
+	| 'rust'
+	| 'java'
+	| 'cpp'
+	| 'csharp'
+	| 'ruby';
 
 /**
  * Code intelligence operations
